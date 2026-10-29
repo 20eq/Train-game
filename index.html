@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#070b14" />
+<title>Train Guard — Western Line</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="stage" aria-label="Train carriage"></canvas>
+
+  <header class="hud top">
+    <div class="brand">
+      <div class="logo">▶</div>
+      <div>
+        <div class="title">TRAIN GUARD</div>
+        <div class="sub">WESTERN LINE · NIGHT SHIFT</div>
+      </div>
+    </div>
+
+    <div class="ticker" id="ticker">All aboard.</div>
+
+    <div class="stats">
+      <div class="stat"><b id="uiScore">0</b><span>SCORE</span></div>
+      <div class="stat"><b id="uiHearts">♥♥♥♥♥</b><span>SAFETY</span></div>
+      <div class="stat"><b id="uiStops">0</b><span>STOPS</span></div>
+    </div>
+  </header>
+
+  <footer class="hud bottom">
+    <button class="door" id="doorTop" data-side="top" type="button">
+      <kbd>Q</kbd>
+      <div><span>NORTH DOORS</span><em id="uiDoorTop">CLOSED</em></div>
+    </button>
+
+    <div class="dwell">
+      <div class="bar"><i id="uiDwell"></i></div>
+      <div class="label" id="uiDwellLabel">DWELL</div>
+    </div>
+
+    <button class="door" id="doorBottom" data-side="bottom" type="button">
+      <div><span>SOUTH DOORS</span><em id="uiDoorBottom">CLOSED</em></div>
+      <kbd>E</kbd>
+    </button>
+
+    <button class="steady" id="steadyBtn" type="button">HOLD<br /><small>STEADY</small></button>
+  </footer>
+
+  <div class="rotate-hint" aria-hidden="true">↻ Rotate your phone for a bigger cab</div>
+
+  <div class="sysbtns">
+    <button class="icon-btn" id="pauseBtn" type="button" aria-label="Pause">❚❚</button>
+    <button class="icon-btn" id="muteBtn" type="button" aria-label="Toggle sound">♪</button>
+  </div>
+
+  <div class="overlay" id="overlayTitle">
+    <div class="card">
+      <h1>TRAIN GUARD</h1>
+      <p class="tag">Western Line · Night Shift</p>
+      <p class="lede">You are the guard on the last coach. Work the doors, keep the platform moving,
+        and steady the passengers who lose their footing when the track kicks.</p>
+      <ul class="keys">
+        <li><kbd>W A S D</kbd><span>walk the coach</span></li>
+        <li><kbd>Q</kbd><kbd>E</kbd><span>north / south doors</span></li>
+        <li><kbd>SPACE</kbd><span>hold to steady everyone nearby</span></li>
+        <li><kbd>P</kbd><kbd>M</kbd><span>pause / mute</span></li>
+      </ul>
+      <button class="primary" id="startBtn" type="button">Clock in</button>
+      <p class="hint" id="bestLine"></p>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="overlayOver">
+    <div class="card">
+      <h1 id="overTitle">SHIFT OVER</h1>
+      <p class="tag" id="overSub">Safety rating exhausted</p>
+      <div class="score-grid">
+        <div><b id="finalScore">0</b><span>SCORE</span></div>
+        <div><b id="finalStops">0</b><span>STOPS</span></div>
+        <div><b id="finalBest">0</b><span>BEST</span></div>
+      </div>
+      <button class="primary" id="againBtn" type="button">Clock in again</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="overlayPause">
+    <div class="card small">
+      <h1>PAUSED</h1>
+      <p class="tag">The coach waits.</p>
+      <button class="primary" id="resumeBtn" type="button">Resume</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="game.js"></script>
+</body>
+</html>
