@@ -1,7 +1,6 @@
 /**
- * A DOM + canvas stub just good enough to boot src/main.js under node --test.
- * It renders into a no-op 2D context and mirrors the classes the real HTML ships
- * with, so title/pause state behaves the way it does in a browser.
+ * A DOM + canvas stub just good enough to boot the real app under node.
+ * It reads index.html so overlay state starts the way it does in a browser.
  */
 
 import { readFileSync } from 'node:fs';
@@ -13,6 +12,7 @@ const ctxStub = new Proxy(
     measureText: () => ({ width: 64 }),
     createLinearGradient: () => ({ addColorStop() {} }),
     createRadialGradient: () => ({ addColorStop() {} }),
+    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
   },
   {
     get(target, prop) {
@@ -27,8 +27,9 @@ const ctxStub = new Proxy(
 );
 
 class Element {
-  constructor(id) {
-    this.id = id;
+  constructor(tag) {
+    this.tagName = tag;
+    this.id = '';
     this.textContent = '';
     this.className = '';
     this.style = {};
@@ -37,8 +38,8 @@ class Element {
     this.listeners = new Map();
     this.classes = new Set();
     this.classList = {
-      add: (c) => this.classes.add(c),
-      remove: (c) => this.classes.delete(c),
+      add: (...c) => c.forEach((x) => this.classes.add(x)),
+      remove: (...c) => c.forEach((x) => this.classes.delete(x)),
       contains: (c) => this.classes.has(c),
       toggle: (c, on) => {
         const next = on === undefined ? !this.classes.has(c) : Boolean(on);
@@ -61,14 +62,16 @@ class Element {
   }
 
   getBoundingClientRect() {
-    return { width: 1366, height: 768, left: 0, top: 0, right: 1366, bottom: 768 };
+    return { width: 1280, height: 720, left: 0, top: 0, right: 1280, bottom: 720 };
   }
 
-  getContext() {
-    return ctxStub;
-  }
+  getContext() { return ctxStub; }
 
   setPointerCapture() {}
+
+  append(...nodes) {
+    for (const node of nodes) this.children.push(node);
+  }
 
   appendChild(child) {
     this.children.push(child);
@@ -77,16 +80,14 @@ class Element {
 
   set innerHTML(value) {
     this.html = value;
-    this.children = [];
+    if (value === '') this.children = [];
   }
 
   get innerHTML() {
     return this.html || '';
   }
 
-  get offsetWidth() {
-    return 120;
-  }
+  get offsetWidth() { return 120; }
 }
 
 function initialClasses(id) {
@@ -108,13 +109,23 @@ export function installDom() {
   globalThis.document = {
     getElementById(id) {
       if (!elements.has(id)) {
-        const el = new Element(id);
+        const el = new Element('div');
+        el.id = id;
         for (const c of initialClasses(id)) el.classList.add(c);
         elements.set(id, el);
       }
       return elements.get(id);
     },
-    createElement: (tag) => new Element(tag),
+    createElement(tag) {
+      if (tag === 'canvas') {
+        const c = new Element('canvas');
+        c.width = 0;
+        c.height = 0;
+        c.getContext = () => ctxStub;
+        return c;
+      }
+      return new Element(tag);
+    },
     addEventListener() {},
     hidden: false,
   };
@@ -124,40 +135,29 @@ export function installDom() {
       if (!windowListeners.has(type)) windowListeners.set(type, []);
       windowListeners.get(type).push(fn);
     },
-    devicePixelRatio: 2,
+    devicePixelRatio: 1,
+    innerWidth: 1280,
+    innerHeight: 720,
     AudioContext: class {
-      constructor() {
-        this.currentTime = 0;
-        this.state = 'running';
-        this.destination = {};
-      }
-
+      constructor() { this.currentTime = 0; this.state = 'running'; this.destination = {}; }
       createOscillator() {
         return {
-          type: '',
-          frequency: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} },
-          connect() { return this; },
-          start() {},
-          stop() {},
+          type: '', frequency: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+          connect() { return this; }, start() {}, stop() {},
         };
       }
-
       createGain() {
-        return {
-          gain: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} },
-          connect() { return this; },
-        };
+        return { gain: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() { return this; } };
       }
-
       resume() {}
     },
   };
 
-  const frames = [];
-  globalThis.requestAnimationFrame = (fn) => frames.push(fn);
+  globalThis.innerWidth = 1280;
+  globalThis.innerHeight = 720;
+  globalThis.devicePixelRatio = 1;
+  globalThis.requestAnimationFrame = () => 1;
   globalThis.ResizeObserver = class { observe() {} };
-
-  let clock = 0;
 
   return {
     elements,
@@ -169,15 +169,6 @@ export function installDom() {
     release(code) {
       for (const fn of windowListeners.get('keyup') || []) {
         fn({ code, key: code, preventDefault() {} });
-      }
-    },
-    /** Run `n` animation frames at ~60 fps. */
-    run(n) {
-      for (let i = 0; i < n; i++) {
-        const fn = frames.shift();
-        if (!fn) throw new Error('the game stopped scheduling frames');
-        clock += 1000 / 60;
-        fn(clock);
       }
     },
   };

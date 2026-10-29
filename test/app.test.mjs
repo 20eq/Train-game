@@ -1,80 +1,129 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+
 import { readFile } from 'node:fs/promises';
-
 import { installDom } from './dom.mjs';
-
-const env = installDom();
-await import('../src/main.js');
-const TG = globalThis.window.__TG;
 
 const read = (f) => readFile(new URL(`../${f}`, import.meta.url), 'utf8');
 
-test('the app boots into the cab with a live network', () => {
-  assert.ok(TG, 'main.js should expose window.__TG after boot');
-  assert.equal(TG.ui.view, 'cab');
-  assert.equal(TG.world.trains.length, 7);
-  assert.ok(TG.world.playerId);
+const env = installDom();
+const { bootApp } = await import('../src/app.js');
+
+// a renderer stub: the app only needs render/setSize/setPixelRatio
+const rendered = { frames: 0 };
+const app = bootApp({
+  createRenderer: () => ({
+    render() { rendered.frames++; },
+    setSize() {},
+    setPixelRatio() {},
+  }),
+  width: 1280,
+  height: 720,
 });
 
-test('frames run without throwing', () => {
-  assert.doesNotThrow(() => env.run(120));
-  const before = TG.world.time;
-  env.run(120);
-  assert.ok(TG.world.time > before, 'time should advance between frames');
+const step = (n = 1) => {
+  for (let i = 0; i < n; i++) app.tick(performance.now() + i * 16);
+};
+
+test('the app boots onto the title card with a live scene behind it', () => {
+  assert.ok(app.world, 'a city is built straight away');
+  assert.ok(app.view, 'and its scene too');
+  assert.equal(app.ui.paused, true, 'the simulation waits for the player');
+  assert.ok(env.elements.get('overlayTitle').classList.contains('hidden') === false);
+  assert.equal(rendered.frames > 0, true, 'the title sits over a rendered frame');
 });
 
-test('the throttle and brake keys reach the player train', () => {
-  const train = TG.world.trains.find((t) => t.id === TG.world.playerId);
+test('the title card offers a different local for every city', () => {
+  const cards = env.elements.get('cityCards');
+  assert.ok(cards.children.length >= 4, `expected a card per city, got ${cards.children.length}`);
+  const labels = cards.children.map((c) => c.children.map((k) => k.textContent).join(' '));
+  for (const label of labels) assert.ok(label.length > 3);
+  assert.ok(labels.some((l) => /Mumbai/.test(l)));
+  assert.ok(labels.some((l) => /Delhi/.test(l)));
+});
 
-  // let the opening station stop finish, the way a player would
-  if (train.state === 'dwell') train.dwell = 0.4;
+test('choosing a city starts that line', () => {
+  const card = env.elements.get('cityCards').children.find((c) => c.dataset.city === 'kolkata');
+  assert.ok(card, 'Kolkata should be on the title card');
+  card.emit('click');
+  assert.equal(app.world.city.id, 'kolkata');
+  assert.equal(app.ui.paused, false);
+  assert.equal(env.elements.get('cityName').textContent, 'Kolkata');
+  assert.ok(env.elements.get('hud').classList.contains('hidden') === false);
+});
+
+test('frames advance the timetable and draw every time', () => {
+  const before = app.world.time;
+  const frames = rendered.frames;
+  step(40);
+  assert.ok(app.world.time > before, 'time should pass once the game is running');
+  assert.ok(rendered.frames > frames, 'each frame should render');
+});
+
+test('the throttle reaches the player train', () => {
+  const train = app.world.trains.find((t) => t.id === app.world.playerId);
+  if (train.state === 'dwell') train.dwell = 0.3;
 
   env.press('KeyW');
-  assert.equal(TG.controls.throttle, true);
-  env.run(180);
-  assert.ok(train.v > 1, `train should be moving, v=${train.v} (state ${train.state})`);
+  assert.equal(app.controls.throttle, true);
+  step(200);
+  assert.ok(train.v > 1, `the train should roll, v=${train.v} state=${train.state}`);
   env.release('KeyW');
-  assert.equal(TG.controls.throttle, false);
+  assert.equal(app.controls.throttle, false);
 
   env.press('KeyS');
-  env.run(240);
+  step(260);
   assert.equal(train.v, 0, 'the brake should bring it to a stand');
   env.release('KeyS');
 });
 
-test('M swaps between the cab and the whole-map view', () => {
-  const start = TG.ui.view;
-  env.press('KeyM');
-  assert.notEqual(TG.ui.view, start);
-  assert.doesNotThrow(() => env.run(30));
-  env.press('KeyM');
-  assert.equal(TG.ui.view, start);
+test('C cycles the camera and the HUD says which one', () => {
+  assert.equal(app.ui.mode, 'cab');
+  env.press('KeyC');
+  assert.equal(app.ui.mode, 'chase');
+  env.press('KeyC');
+  assert.equal(app.ui.mode, 'lineside');
+  env.press('KeyC');
+  assert.equal(app.ui.mode, 'cab');
+  assert.equal(env.elements.get('camName').textContent, 'cab');
 });
 
-test('Tab hands the player to the next train', () => {
-  const first = TG.world.playerId;
+test('the HUD reports the next stop and the speed limit', () => {
+  step(2);
+  assert.ok(env.elements.get('nextName').textContent.length > 0);
+  const speed = Number(env.elements.get('speedValue').textContent);
+  assert.ok(Number.isFinite(speed) && speed >= 0);
+  const limit = Number(env.elements.get('limitBadge').textContent);
+  assert.ok(limit > 0, 'a speed limit should be shown');
+  assert.match(env.elements.get('clock').textContent, /^\d\d:\d\d(:\d\d)?$/);
+});
+
+test('Tab hands over to another train in the same world', () => {
+  const first = app.world.playerId;
   env.press('Tab');
-  assert.notEqual(TG.world.playerId, first);
-  const player = TG.world.trains.find((t) => t.id === TG.world.playerId);
-  assert.equal(player.ai, false, 'the train we took must stop being an autopilot');
-  assert.doesNotThrow(() => env.run(60));
+  assert.notEqual(app.world.playerId, first);
+  step(20);
 });
 
-test('pausing freezes the clock and resuming restarts it', () => {
+test('pause freezes the clock and resume restarts it', () => {
   env.press('KeyP');
-  const frozen = TG.world.time;
-  env.run(60);
-  assert.equal(TG.world.time, frozen, 'a paused game must not advance');
+  assert.equal(app.ui.paused, true);
+  const frozen = app.world.time;
+  step(30);
+  assert.equal(app.world.time, frozen);
+
   env.press('KeyP');
-  env.run(60);
-  assert.ok(TG.world.time > frozen);
+  assert.equal(app.ui.paused, false);
+  step(30);
+  assert.ok(app.world.time > frozen);
 });
 
-test('index.html wires the module and the stylesheet, and has unique ids', async () => {
+test('index.html wires the module, the stylesheet and unique ids', async () => {
   const html = await read('index.html');
-  assert.match(html, /<script type="module" src="src\/main\.js"><\/script>/);
+  assert.match(html, /<script type="module">/);
+  assert.match(html, /from '\.\/src\/app\.js'/);
   assert.match(html, /<link rel="stylesheet" href="style\.css"/);
+  assert.match(html, /<canvas id="scene">/);
 
   const ids = [...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(ids.filter((id, i) => ids.indexOf(id) !== i), [], 'duplicate ids break getElementById');
@@ -82,24 +131,28 @@ test('index.html wires the module and the stylesheet, and has unique ids', async
 
 test('every element the app looks up exists in the markup', async () => {
   const html = await read('index.html');
-  const main = await read('src/main.js');
+  const src = await read('src/app.js');
   const htmlIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
-  const used = [...main.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]);
-  assert.ok(used.length > 8);
+  const used = [...src.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]);
+  assert.ok(used.length > 12);
   assert.deepEqual([...new Set(used)].filter((id) => !htmlIds.has(id)), []);
 });
 
-test('the game makes no network calls and no external requests', async () => {
-  for (const file of ['src/main.js', 'src/sim.js', 'src/world.js', 'src/cab.js', 'src/render.js', 'src/geo.js']) {
+test('three.js is vendored, not loaded from the network', async () => {
+  const files = ['src/app.js', 'src/scene3d.js', 'src/world.js', 'src/sim.js', 'src/cities.js', 'src/geo.js'];
+  for (const file of files) {
     const src = await read(file);
     assert.doesNotMatch(src, /\bfetch\s*\(/, `${file} should not fetch`);
-    assert.doesNotMatch(src, /https?:\/\//, `${file} should not reference remote URLs`);
+    assert.doesNotMatch(src, /https?:\/\//, `${file} should not reference a remote URL`);
   }
+  const app = await read('src/app.js');
+  assert.match(app, /from '\.\.\/vendor\/three\.module\.js'/, 'three.js must come from vendor/');
 });
 
-test('the stylesheet is balanced', async () => {
+test('the stylesheet is balanced and the page has no leftover ids', async () => {
   const css = await read('style.css');
-  const open = (css.match(/{/g) || []).length;
-  const close = (css.match(/}/g) || []).length;
-  assert.equal(open, close);
+  assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length);
+  const html = await read('index.html');
+  assert.doesNotMatch(html, /id="map"/, 'the old 2D map canvas is gone');
+  assert.doesNotMatch(css, /#map\b/, 'and its styles too');
 });

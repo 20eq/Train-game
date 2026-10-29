@@ -54,11 +54,11 @@ test('project() snaps a station onto the rails', () => {
   assert.ok(hit.dist > 30 && hit.dist < 50);
 });
 
-test('the world has three connected lines and a fleet on each', () => {
+test('the world has a trunk and a branch with a fleet on each', () => {
   const world = createWorld();
-  assert.deepEqual(Object.keys(world.paths).sort(), ['harbour', 'link', 'main']);
-  assert.ok(world.stations.length >= 20);
-  assert.equal(world.trains.length, 7);
+  assert.deepEqual(Object.keys(world.paths).sort(), ['branch', 'main']);
+  assert.ok(world.stations.length >= 18);
+  assert.equal(world.trains.length, 6);
 
   for (const train of world.trains) {
     assert.ok(train.route.length >= 3, `${train.id} needs a route`);

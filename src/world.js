@@ -1,179 +1,187 @@
 /**
- * The network: three lines, their stations, and the trains that work them.
+ * Turns a city definition into a live network: track geometry, stations,
+ * signals and a fleet keeping to the timetable.
  *
- * Everything is derived from a few control points, so the map stays editable
- * in one place and the geometry (station distances, platform headings) is
- * computed rather than hand-tuned.
+ * The track is grown from the city's seed with a deterministic walk, so every
+ * city has its own alignment while the rest of the game can rely on the same
+ * shape of data.
  */
 
-import { buildPath, project, sample } from './geo.js';
+import { buildPath, sample } from './geo.js';
+import { getCity } from './cities.js';
 
-export const WORLD = { w: 5200, h: 3400 };
+export const COACH_LEN = 19;
+export const COACH_CAPACITY = 110;
 
-const MAIN_CONTROL = [
-  [320, 3010], [740, 2930], [1150, 2985], [1540, 2825], [1930, 2860],
-  [2310, 2700], [2690, 2745], [3030, 2540], [3370, 2470], [3660, 2210],
-  [3830, 1930], [3860, 1620], [4010, 1330], [4210, 1150], [4390, 860],
-  [4530, 560], [4700, 300],
-].map(([x, y]) => ({ x, y }));
+/** Small deterministic PRNG so a seed always grows the same railway. */
+export function makeRand(seed) {
+  let a = (seed >>> 0) || 1;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-// Stations are placed by fraction of each line, then snapped onto the rails.
-const MAIN_STATIONS = [
-  { id: 'cg', name: 'Churchgate', at: 0.03, major: true },
-  { id: 'ml', name: 'Marine Lines', at: 0.09 },
-  { id: 'cr', name: 'Charni Road', at: 0.15 },
-  { id: 'gr', name: 'Grant Road', at: 0.21 },
-  { id: 'mct', name: 'Mumbai Central', at: 0.27, major: true },
-  { id: 'mhl', name: 'Mahalaxmi', at: 0.33, hub: true },
-  { id: 'lp', name: 'Lower Parel', at: 0.39 },
-  { id: 'dad', name: 'Dadar', at: 0.45, major: true },
-  { id: 'mtr', name: 'Matunga Road', at: 0.51 },
-  { id: 'mhm', name: 'Mahim', at: 0.57, hub: true },
-  { id: 'bnd', name: 'Bandra', at: 0.63, major: true },
-  { id: 'snc', name: 'Santacruz', at: 0.69 },
-  { id: 'and', name: 'Andheri', at: 0.75, major: true },
-  { id: 'gor', name: 'Goregaon', at: 0.82 },
-  { id: 'bor', name: 'Borivali', at: 0.89, major: true },
-  { id: 'vir', name: 'Virar', at: 0.96, major: true },
-];
+/** A wandering alignment: the line bends steadily instead of zig-zagging. */
+function growLine(rand, { segments, step, turn, heading }) {
+  const pts = [{ x: 0, y: 0 }];
+  let x = 0;
+  let y = 0;
+  let a = heading;
+  for (let i = 0; i < segments; i++) {
+    a += (rand() - 0.5) * turn;
+    // keep the line from curling back on itself
+    a = Math.max(-2.1, Math.min(2.1, a));
+    x += Math.cos(a) * step;
+    y += Math.sin(a) * step;
+    pts.push({ x, y });
+  }
+  return pts;
+}
 
-const HARBOUR_STATIONS = [
-  { id: 'mhl', name: 'Mahalaxmi', at: 0 },
-  { id: 'wad', name: 'Wadala Road', at: 0.18 },
-  { id: 'sew', name: 'Sewri', at: 0.35 },
-  { id: 'rey', name: 'Reay Road', at: 0.52, major: true },
-  { id: 'doc', name: 'Dockyard Road', at: 0.67 },
-  { id: 'san', name: 'Sandhurst Road', at: 0.83 },
-  { id: 'mas', name: 'Masjid', at: 1, major: true, hub: true },
-];
+function shiftTo(pts, minX, minY) {
+  const ox = Math.min(...pts.map((p) => p.x));
+  const oy = Math.min(...pts.map((p) => p.y));
+  return pts.map((p) => ({ x: p.x - ox + minX, y: p.y - oy + minY }));
+}
 
-const LINK_STATIONS = [
-  { id: 'mas', name: 'Masjid', at: 0 },
-  { id: 'chb', name: 'Chunabhatti', at: 0.26 },
-  { id: 'ghk', name: 'Ghatkopar', at: 0.5, major: true },
-  { id: 'vkv', name: 'Vidyavihar', at: 0.74 },
-  { id: 'mhm', name: 'Mahim', at: 1, major: true, hub: true },
-];
-
-const TRAIN_DEFS = [
-  {
-    id: 'exp1', name: 'Saurashtra Express', kind: 'express', path: 'main',
-    coaches: 12, vmax: 26, dir: 1, at: 0.03, route: 'majors', livery: 'express', startAtPlatform: true,
-  },
-  {
-    id: 'exp2', name: 'Virar Fast', kind: 'express', path: 'main',
-    coaches: 9, vmax: 25, dir: -1, at: 0.86, route: 'majors', livery: 'fast',
-  },
-  {
-    id: 'loc1', name: 'Churchgate Local', kind: 'local', path: 'main',
-    coaches: 7, vmax: 21, dir: 1, at: 0.14, route: 'all', livery: 'local',
-  },
-  {
-    id: 'loc2', name: 'Borivali Local', kind: 'local', path: 'main',
-    coaches: 7, vmax: 21, dir: -1, at: 0.72, route: 'all', livery: 'local',
-  },
-  {
-    id: 'loc3', name: 'Andheri Local', kind: 'local', path: 'main',
-    coaches: 6, vmax: 20, dir: 1, at: 0.52, route: 'all', livery: 'local2',
-  },
-  {
-    id: 'harb', name: 'Harbour Local', kind: 'local', path: 'harbour',
-    coaches: 6, vmax: 19, dir: 1, at: 0.12, route: 'all', livery: 'harbour',
-  },
-  {
-    id: 'link', name: 'Link Shuttle', kind: 'shuttle', path: 'link',
-    coaches: 3, vmax: 16, dir: 1, at: 0.08, route: 'all', livery: 'link',
-  },
-];
-
-const COACH_LEN = 19;
-const COACH_CAPACITY = 110;
-
-function stationsFor(path, defs, pathId) {
-  return defs.map((def) => {
-    const s = def.at * path.length;
+function stationsFor(path, defs, pathId, majorEvery = 3) {
+  return defs.map(([name, at], i) => {
+    const s = at * path.length;
     const p = sample(path, s);
     return {
-      id: def.id,
-      name: def.name,
+      id: `${pathId}-${i}`,
+      name,
       pathId,
       s,
       x: p.x,
       y: p.y,
       angle: p.angle,
-      major: Boolean(def.major),
-      hub: Boolean(def.hub),
+      major: i === 0 || i === defs.length - 1 || i % majorEvery === 0,
+      hub: at === 0 || at === 1,
       waiting: 0,
       delivered: 0,
     };
   });
 }
 
-function buildHarbour(mainPath, hubStation) {
-  const start = sample(mainPath, hubStation.s);
-  const offsets = [[0, 0], [430, 150], [860, 105], [1270, 255], [1640, 430], [1960, 470], [2210, 585]];
-  return buildPath(offsets.map(([dx, dy]) => ({ x: start.x + dx, y: start.y + dy })), 16);
-}
-
-function buildLink(harbourEnd, mahim) {
-  const a = harbourEnd;
-  const b = { x: mahim.x, y: mahim.y };
-  const mix = (t, ox, oy) => ({ x: a.x + (b.x - a.x) * t + ox, y: a.y + (b.y - a.y) * t + oy });
-  return buildPath([a, mix(0.24, 190, 90), mix(0.5, -150, -40), mix(0.76, 110, -110), b], 16);
-}
-
-export function createWorld({ startWaiting = true } = {}) {
-  const main = buildPath(MAIN_CONTROL, 18);
-  const mainStations = stationsFor(main, MAIN_STATIONS, 'main');
-  const byId = new Map(mainStations.map((s) => [s.id, s]));
-
-  const harbour = buildHarbour(main, byId.get('mhl'));
-  const harbourStations = stationsFor(harbour, HARBOUR_STATIONS, 'harbour')
-    // the hub keeps the main-line coordinates so the two lines actually meet
-    .map((s) => (s.id === 'mhl' ? { ...s, x: byId.get('mhl').x, y: byId.get('mhl').y } : s));
-
-  const harbourEnd = sample(harbour, harbour.length);
-  const link = buildLink(harbourEnd, byId.get('mhm'));
-  const linkStations = stationsFor(link, LINK_STATIONS, 'link')
-    .map((s) => (s.id === 'mas' ? { ...s, x: harbourEnd.x, y: harbourEnd.y, angle: harbourEnd.angle } : s));
-
-  const paths = { main, harbour, link };
-  const stations = [...mainStations, ...harbourStations.filter((s) => s.id !== 'mhl'), ...linkStations.filter((s) => s.id !== 'mas' && s.id !== 'mhm')];
-  const allById = new Map();
-  for (const s of [...mainStations, ...harbourStations, ...linkStations]) {
-    if (!allById.has(s.id)) allById.set(s.id, s);
+/** The branch leaves a trunk station and curves away to a terminus. */
+function branchFrom(rand, trunk, junction) {
+  const head = sample(trunk, junction.s).angle;
+  const side = rand() > 0.5 ? 1 : -1;
+  const pts = [{ x: junction.x, y: junction.y }];
+  let a = head + side * 0.55;
+  let x = junction.x;
+  let y = junction.y;
+  const segments = 7;
+  const step = 240 + rand() * 60;
+  for (let i = 0; i < segments; i++) {
+    a += (rand() - 0.5) * 0.34 + side * 0.045;
+    x += Math.cos(a) * step;
+    y += Math.sin(a) * step;
+    pts.push({ x, y });
   }
+  return buildPath(pts, 16);
+}
 
-  const stationsOnPath = {
-    main: mainStations,
-    harbour: harbourStations,
-    link: linkStations,
-  };
+function fleetFor(city, paths, onPath) {
+  const main = onPath.main;
+  const branch = onPath.branch;
+  const first = main[0].name;
+  const last = main[main.length - 1].name;
+  const mid = main[Math.floor(main.length / 2)].name;
 
-  if (startWaiting) {
-    for (const s of allById.values()) {
-      s.waiting = s.major ? 60 + Math.round(Math.random() * 70) : 15 + Math.round(Math.random() * 45);
+  const mk = (def) => ({
+    kind: 'local',
+    coaches: 9,
+    vmax: 24,
+    dir: 1,
+    route: 'all',
+    livery: 'local',
+    ai: true,
+    ...def,
+  });
+
+  return [
+    // the player's train: a long-distance working that calls at the majors
+    mk({ id: 'exp1', name: `${city.city} Express`, kind: 'express', path: 'main', coaches: 12, vmax: 28,
+      dir: 1, at: 0.03, route: 'majors', livery: 'express', startAtPlatform: true, ai: false }),
+    mk({ id: 'exp2', name: `${last} Fast`, kind: 'express', path: 'main', coaches: 9, vmax: 27,
+      dir: -1, at: 0.86, route: 'majors', livery: 'express' }),
+    mk({ id: 'loc1', name: `${last} Local`, path: 'main', coaches: 9, vmax: 22, dir: 1, at: 0.16 }),
+    mk({ id: 'loc2', name: `${first} Local`, path: 'main', coaches: 9, vmax: 22, dir: -1, at: 0.7 }),
+    mk({ id: 'loc3', name: `${mid} Local`, path: 'main', coaches: 6, vmax: 20, dir: 1, at: 0.52 }),
+    mk({ id: 'br1', name: `${branch[branch.length - 1].name} Local`, path: 'branch', coaches: 6, vmax: 20,
+      dir: 1, at: 0.12 }),
+  ].filter((def) => paths[def.path]);
+}
+
+export function createWorld({ city: cityId = 'mumbai', startWaiting = true, seed } = {}) {
+  const city = getCity(cityId);
+  const rand = makeRand(seed ?? city.seed);
+
+  const trunkPts = shiftTo(
+    growLine(rand, { segments: 22, step: 268, turn: 0.42, heading: -0.7 }),
+    380,
+    420,
+  );
+  const main = buildPath(trunkPts, 18);
+  const mainStations = stationsFor(main, city.stations, 'main');
+
+  const junction = mainStations[Math.max(1, Math.floor(mainStations.length * 0.34))];
+  const branchPath = branchFrom(rand, main, junction);
+  const branchDefs = city.branch.map(([name, at]) => [name, at]);
+  const branchStations = stationsFor(branchPath, branchDefs, 'branch');
+
+  const paths = { main };
+  const stationsOnPath = { main: mainStations };
+  paths.branch = branchPath;
+  stationsOnPath.branch = branchStations;
+
+  const stationById = new Map();
+  const stations = [];
+  for (const list of Object.values(stationsOnPath)) {
+    for (const st of list) {
+      // the junction is the same place on both lines: keep one record, remapped
+      if (st === branchStations[0]) {
+        st.name = junction.name;
+        st.major = true;
+      }
+      stations.push(st);
+      if (!stationById.has(st.id)) stationById.set(st.id, st);
     }
   }
 
-  const routes = {
-    all: (pathId) => stationsOnPath[pathId].map((s) => s.id),
-    majors: (pathId) => stationsOnPath[pathId].filter((s) => s.major).map((s) => s.id),
-  };
+  if (startWaiting) {
+    for (const st of stations) {
+      st.waiting = st.major ? 70 + Math.round(rand() * 90) : 20 + Math.round(rand() * 55);
+    }
+  }
 
-  const trains = TRAIN_DEFS.map((def) => {
+  const routeIds = (pathId, kind) => (kind === 'majors'
+    ? stationsOnPath[pathId].filter((st) => st.major)
+    : stationsOnPath[pathId]
+  ).map((st) => st.id);
+
+  const trains = fleetFor(city, paths, stationsOnPath).map((def) => {
     const path = paths[def.path];
-    const routeIds = def.route === 'majors' ? routes.majors(def.path) : routes.all(def.path);
-    // resolve against this line's own station objects — hub stations exist on
-    // several lines and each copy has its own distance along its own path
-    const route = routeIds.map((id) => stationsOnPath[def.path].find((st) => st.id === id));
+    const route = routeIds(def.path, def.route).map((id) => stationsOnPath[def.path].find((st) => st.id === id));
     let s = def.at * path.length;
-
-    // find the first station in front of us in the direction of travel
-    let idx = route.findIndex((st) => (st.s - s) * def.dir > 0);
+    // the next call is the first station ahead *in the direction of travel*:
+    // routes are ordered by distance, so a down-direction train counts back
+    let idx;
+    if (def.dir > 0) {
+      idx = route.findIndex((st) => st.s > s);
+    } else {
+      idx = route.length - 1;
+      while (idx > 0 && route[idx].s > s) idx--;
+      if (route[idx].s > s) idx = -1;
+    }
     if (idx < 0) idx = def.dir > 0 ? route.length - 1 : 0;
 
-    // the player's train starts standing at a platform, ready to work the doors
     const startStation = route.find((st) => Math.abs(st.s - s) < 320);
     const atPlatform = Boolean(def.startAtPlatform && startStation);
     if (atPlatform) {
@@ -182,7 +190,6 @@ export function createWorld({ startWaiting = true } = {}) {
     }
 
     return {
-      arriveAtStart: atPlatform,
       id: def.id,
       name: def.name,
       kind: def.kind,
@@ -194,8 +201,8 @@ export function createWorld({ startWaiting = true } = {}) {
       dir: def.dir,
       v: 0,
       vmax: def.vmax,
-      accel: def.kind === 'express' ? 1.05 : 1.3,   // m/s²
-      brake: def.kind === 'express' ? 1.6 : 1.9,    // m/s² service braking
+      accel: def.kind === 'express' ? 1.05 : 1.3,
+      brake: def.kind === 'express' ? 1.6 : 1.9,
       coaches: def.coaches,
       coachLen: COACH_LEN,
       length: def.coaches * COACH_LEN,
@@ -208,7 +215,7 @@ export function createWorld({ startWaiting = true } = {}) {
       state: atPlatform ? 'dwell' : 'run',
       exchanged: false,
       autoDepart: true,
-      ai: def.id !== 'exp1',
+      ai: def.ai !== false,
       throttle: 0,
       braking: 0,
       lastStop: null,
@@ -217,16 +224,25 @@ export function createWorld({ startWaiting = true } = {}) {
       stun: 0,
       message: '',
       messageT: 0,
+      arriveAtStart: atPlatform,
     };
   });
 
-  const world = {
+  const xs = Object.values(paths).flatMap((p) => p.pts.map((pt) => pt.x));
+  const ys = Object.values(paths).flatMap((p) => p.pts.map((pt) => pt.y));
+
+  return {
+    city,
     paths,
     stations,
-    stationById: allById,
+    stationById,
     stationsOnPath,
     trains,
-    time: 6 * 3600, // seconds since midnight, starts at 06:00
+    bounds: {
+      minX: Math.min(...xs), maxX: Math.max(...xs),
+      minY: Math.min(...ys), maxY: Math.max(...ys),
+    },
+    time: 6 * 3600,
     score: 0,
     playerId: 'exp1',
     events: [],
@@ -234,17 +250,6 @@ export function createWorld({ startWaiting = true } = {}) {
     collisions: 0,
     delivered: 0,
   };
-
-  return world;
 }
 
-export const TRAIN_COLORS = {
-  express: { body: '#274a86', stripe: '#e9eef7', roof: '#1a3563', nose: '#1b2b4a' },
-  fast: { body: '#2f5aa8', stripe: '#f2d06b', roof: '#234379', nose: '#1b2b4a' },
-  local: { body: '#8c3b3b', stripe: '#f0e3c8', roof: '#6f2d2d', nose: '#3a1a1a' },
-  local2: { body: '#8c3b3b', stripe: '#f0e3c8', roof: '#6f2d2d', nose: '#3a1a1a' },
-  harbour: { body: '#2c6b62', stripe: '#f0e3c8', roof: '#22544d', nose: '#15332f' },
-  link: { body: '#6b5a2c', stripe: '#f0e3c8', roof: '#54461f', nose: '#332b13' },
-};
-
-export { COACH_LEN, COACH_CAPACITY };
+export { getCity };

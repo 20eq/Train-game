@@ -291,7 +291,15 @@ function stepTrain(world, train, dt) {
     train.idle = blocked ? 0 : (train.idle || 0) + dt;
     if (train.idle > 12) {
       train.idle = 0;
-      advance(world, train); // queued behind traffic: skip quietly, no penalty
+      const target = train.route[train.idx];
+      const d = target ? stationDistance(train, target) : 0;
+      if (target && d < -TUNING.arriveWindow) {
+        // stopped beyond the platform edge in clear air: that is a miss, not a
+        // queue, and the timetable has to say so
+        missStop(world, train, target);
+      } else {
+        advance(world, train); // queued behind traffic: skip quietly
+      }
     }
   } else {
     train.idle = 0;
@@ -311,11 +319,13 @@ export function driveAI(world, train, dt) {
 
   if (target) {
     const d = stationDistance(train, target);
-    // aim to be stationary a little short of the board, with a braking margin
-    const stopAt = Math.max(0, d - 10);
-    const usable = train.brake * 0.62;
-    goal = Math.min(goal, Math.sqrt(Math.max(0, 2 * usable * stopAt)));
-    if (d < 34) goal = Math.min(goal, Math.max(0, (d - 4) * 0.45));
+    // Braking curve: the highest speed from which the brakes can still pull us
+    // up at the board. We aim at a comfortable fraction of the brake so there
+    // is always margin left to correct with.
+    const stopAt = Math.max(0, d - 5);
+    const usable = train.brake * 0.55;
+    goal = Math.min(goal, Math.sqrt(2 * usable * stopAt));
+    if (d < 10) goal = Math.min(goal, Math.max(0, d * 0.35));
   }
 
   const sig = nextSignal(world, train);
@@ -329,12 +339,13 @@ export function driveAI(world, train, dt) {
     else goal = Math.min(goal, Math.sqrt(Math.max(0, 2 * train.brake * (gap - TUNING.safeGap))));
   }
 
-  if (train.v < goal - 0.6) {
+  if (train.v < goal - 0.3) {
     train.throttle = 1;
     train.braking = 0;
-  } else if (train.v > goal + 0.6) {
+  } else if (train.v > goal + 0.3) {
     train.throttle = 0;
-    train.braking = clamp((train.v - goal) / 14, 0.25, 1);
+    // a tight proportional band: a lazy one lets the train drift past the board
+    train.braking = clamp((train.v - goal) / 3.5, 0.2, 1);
   } else {
     train.throttle = 0;
     train.braking = 0;
