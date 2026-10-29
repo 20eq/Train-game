@@ -22,41 +22,60 @@ const step = (frames, each) => {
 
 /** Plays like a competent guard: opens doors when people wait, closes them when empty,
  *  and sprints to steady anyone who trips. */
-function autoplay(frames) {
-  for (let i = 0; i < frames; i++) {
-    const w = TG.world;
-    if (TG.game.state !== 'playing') return;
+function autoplayStep() {
+  const w = TG.world;
+  if (TG.game.state !== 'playing') return;
 
-    const tripped = w.passengers
-      .filter((p) => p.stumble > 0 && p.onboard)
-      .sort((a, b) => Math.hypot(a.x - TG.player.x, a.y - TG.player.y) - Math.hypot(b.x - TG.player.x, b.y - TG.player.y))[0];
+  const tripped = w.passengers
+    .filter((p) => p.stumble > 0 && p.onboard)
+    .sort((a, b) => Math.hypot(a.x - TG.player.x, a.y - TG.player.y)
+      - Math.hypot(b.x - TG.player.x, b.y - TG.player.y))[0];
 
-    if (tripped) {
-      const dist = Math.hypot(tripped.x - TG.player.x, tripped.y - TG.player.y);
-      if (dist > 34) {
-        TG.player.x += ((tripped.x - TG.player.x) / dist) * 220 * DT;
-        TG.player.y += ((tripped.y - TG.player.y) / dist) * 220 * DT;
-        TG.setSteady(false);
-      } else {
-        TG.setSteady(true);
-      }
-    } else {
+  if (tripped) {
+    const dist = Math.hypot(tripped.x - TG.player.x, tripped.y - TG.player.y);
+    if (dist > 34) {
+      TG.player.x += ((tripped.x - TG.player.x) / dist) * 220 * DT;
+      TG.player.y += ((tripped.y - TG.player.y) / dist) * 220 * DT;
       TG.setSteady(false);
-      if (w.phase === 'dwell') {
-        const waiting = w.passengers.some((p) => !p.gone && (!p.onboard || p.leaving));
-        const shut = TG.doors.every((d) => d.target === 0);
-        const wide = TG.doors.every((d) => d.target === 1);
-        if (waiting && shut) {
-          TG.toggleDoors('top');
-          TG.toggleDoors('bottom');
-        } else if (!waiting && wide) {
-          TG.toggleDoors('top');
-          TG.toggleDoors('bottom');
-        }
+    } else {
+      TG.setSteady(true);
+    }
+  } else {
+    TG.setSteady(false);
+    if (w.phase === 'dwell') {
+      const waiting = w.passengers.some((p) => !p.gone && (!p.onboard || p.leaving));
+      const shut = TG.doors.every((d) => d.target === 0);
+      const wide = TG.doors.every((d) => d.target === 1);
+      if (waiting && shut) {
+        TG.toggleDoors('top');
+        TG.toggleDoors('bottom');
+      } else if (!waiting && wide) {
+        TG.toggleDoors('top');
+        TG.toggleDoors('bottom');
       }
     }
-    TG.step(DT);
   }
+  TG.step(DT);
+}
+
+function autoplay(frames) {
+  for (let i = 0; i < frames; i++) autoplayStep();
+}
+
+/** Advance with the bot until `predicate` holds. Bounded, with a real diagnostic
+ *  instead of a wall-clock race (a stop cycle is dwell + depart + cruise + brake,
+ *  and cruise alone is randomised between 7 and 11 seconds). */
+function playUntil(predicate, { maxSeconds = 60, label = 'condition' } = {}) {
+  const frames = Math.round(maxSeconds * 60);
+  for (let i = 0; i < frames; i++) {
+    if (predicate()) return i / 60;
+    autoplayStep();
+  }
+  const w = TG.world;
+  assert.fail(
+    `timed out after ${maxSeconds}s waiting for ${label} ` +
+    `(phase=${w.phase}, speed=${w.speed.toFixed(2)}, stops=${TG.game.stops}, dwell=${w.dwell.toFixed(1)})`,
+  );
 }
 
 test('the game boots into the title screen with nothing running', () => {
@@ -95,8 +114,12 @@ test('opening doors boards the queue and closing them departs the stop', () => {
   step(60 * 6);
   assert.ok(TG.world.passengers.filter((p) => p.onboard).length > boarders * 0.5, 'most of the queue should be aboard');
 
-  autoplay(60 * 25);
-  assert.ok(TG.game.stops >= 1, `the shift should have reached the next stop (stops=${TG.game.stops})`);
+  // boarding should complete and the doors close on their own once the queue is in
+  const departedIn = playUntil(() => TG.world.phase !== 'dwell', { label: 'departure from stop 0' });
+  assert.ok(departedIn < 20, `should depart promptly, took ${departedIn.toFixed(1)}s`);
+
+  const arrivedIn = playUntil(() => TG.game.stops >= 1, { label: 'arrival at the next stop' });
+  assert.ok(arrivedIn < 20, `should reach the next stop promptly, took ${arrivedIn.toFixed(1)}s`);
   assert.ok(TG.game.score > 0, 'boarding people should score');
 });
 
