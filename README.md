@@ -4,6 +4,8 @@ You are in the driving cab of a Western Line express. Three connected lines, a
 fleet of locals and long-distance services, and a whole evening of timetable to
 run. Look out of the windscreen; the instruments are in front of you.
 
+![The cab, 180 m out from Mumbai Central](docs/cab.png)
+
 No build step, no frameworks, no bundler. A static server and ES modules.
 
 ```bash
