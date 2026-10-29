@@ -75,3 +75,11 @@ same code runs in the browser, in tests and in the headless traces.
 | `src/render.js` | the network map renderer |
 | `src/geo.js` | curves, path sampling, projection helpers |
 | `src/main.js` | boot, input, camera, HUD, overlays |
+| `auth.py` | lean password/session core (stdlib PBKDF2, lockout, sessions) |
+
+## Tests
+
+```bash
+npm test                              # the game: 27 node tests
+python3 -m unittest discover -s test  # auth.py: 27 unit tests
+```
