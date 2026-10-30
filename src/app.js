@@ -102,6 +102,10 @@ export function bootApp(options = {}) {
     hud: $('hud'),
     cityName: $('cityName'),
     lineName: $('lineName'),
+    lineMap: $('lineMap'),
+    mapLine: $('mapLine'),
+    mapMeta: $('mapMeta'),
+    mapRail: $('mapRail'),
     clock: $('clock'),
     score: $('scoreValue'),
     nextName: $('nextName'),
@@ -314,6 +318,7 @@ export function bootApp(options = {}) {
     show(el.overlayPause, false);
     show(el.hud, true);
     if (el.serviceName) el.serviceName.textContent = `${service.name} · ${service.kindLabel}`;
+    buildLineMap(service);
     resize();
     updateWorld3D(view, world);
     pushTicker(`${service.name} · ${service.cars} coaches · ready to depart`, 'info', 4);
@@ -379,6 +384,69 @@ export function bootApp(options = {}) {
     node.classList.toggle('amber', Boolean(amber));
   }
 
+  /**
+   * The line map: every station on the service's line, the major ones named,
+   * the next one ringed, and where your train and the traffic are on it.
+   */
+  function buildLineMap(service) {
+    if (!el.mapRail) return;
+    const pathId = service.line;
+    const stations = world.stationsOnPath[pathId] || [];
+    const pathLen = world.paths[pathId] ? world.paths[pathId].length : 1;
+    if (el.mapLine) el.mapLine.textContent = service.lineName || pathId;
+    if (el.mapMeta) el.mapMeta.textContent = `${stations.length} stations · ${(pathLen / 1000).toFixed(1)} km`;
+    if (el.lineMap) el.lineMap.style.setProperty('--accent', service.lineColour || '#ffcf5c');
+
+    el.mapRail.innerHTML = '';
+    const ticks = [];
+    stations.forEach((st, i) => {
+      const tick = document.createElement('span');
+      tick.className = `railtick${st.major ? ' major' : ''}`;
+      tick.style.left = `${(st.s / pathLen) * 100}%`;
+      // name the majors, and never let the labels crowd: every other one
+      const named = st.major && i % 2 === 0;
+      if (named) {
+        const label = document.createElement('b');
+        label.textContent = st.name;
+        tick.appendChild(label);
+      }
+      el.mapRail.appendChild(tick);
+      ticks.push({ st, tick, label: named ? tick.children[0] : null });
+    });
+
+    // markers: you, plus every other train working the same line
+    const me = document.createElement('i');
+    me.className = 'railmark me';
+    el.mapRail.appendChild(me);
+
+    const others = world.trains
+      .filter((t) => t.id !== world.playerId && t.pathId === pathId)
+      .map((t) => {
+        const mark = document.createElement('i');
+        mark.className = 'railmark ai';
+        el.mapRail.appendChild(mark);
+        return { train: t, mark };
+      });
+
+    el.mapRail.__map = { stations, pathLen, ticks, me, others };
+  }
+
+  function updateLineMap() {
+    const map = el.mapRail && el.mapRail.__map;
+    if (!map || !world) return;
+    const train = playerTrain(world);
+    const at = (s) => `${Math.max(0, Math.min(1, s / map.pathLen)) * 100}%`;
+    map.me.style.left = at(train.s);
+
+    const nextId = train.route[train.idx] ? train.route[train.idx].id : null;
+    for (const { st, tick } of map.ticks) {
+      tick.classList.toggle('next', st.id === nextId);
+    }
+    for (const { train: other, mark } of map.others) {
+      mark.style.left = at(other.s);
+    }
+  }
+
   function updateHud() {
     const train = playerTrain(world);
     const stop = train.route[train.idx] || null;
@@ -396,6 +464,7 @@ export function bootApp(options = {}) {
     if (el.powerNotch) el.powerNotch.textContent = String(controls.power);
     if (el.brakeNotch) el.brakeNotch.textContent = String(controls.brakeNotch);
     if (el.camName) el.camName.textContent = CAMERA_LABELS[ui.mode] || ui.mode;
+    updateLineMap();
 
     if (stop) {
       const d = Math.abs(stationDistance(train, stop));

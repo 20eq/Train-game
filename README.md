@@ -65,7 +65,9 @@ Three cameras, cycled with **C** (drag the scene to swing the lineside camera):
 
 The HUD carries the analogue speedo, the power and brake notch levers, lamp
 repeaters (doors, signal, limit, horn), the next stop with distance and the
-green-zone chip, the score and the run's message log.
+green-zone chip, the score and the run's message log — and a **line map**: every
+station on the line you are working, the majors named, the next stop ringed,
+your train moving along it and the traffic on the same line moving with you.
 
 ## Controls
 
@@ -82,6 +84,9 @@ green-zone chip, the score and the run's message log.
 | `T` | hand over to the autopilot |
 | `P` / `Esc` | pause |
 | `1` `2` `3` | jump straight to cab / chase / lineside |
+
+At the title card, `1`–`4` pick a city; inside the Drive menu, `1`–`3` pick a
+service.
 
 ## How it works
 

@@ -32,7 +32,11 @@ class Element {
     this.id = '';
     this.textContent = '';
     this.className = '';
-    this.style = {};
+    this.style = {
+      setProperty(key, value) { this[key] = value; },
+      getPropertyValue(key) { return this[key] || ''; },
+      removeProperty(key) { delete this[key]; },
+    };
     this.dataset = {};
     this.children = [];
     this.listeners = new Map();

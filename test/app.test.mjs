@@ -205,6 +205,26 @@ test('the stylesheet is balanced and the page has no leftover ids', async () => 
   assert.doesNotMatch(css, /#map\b/, 'and its styles too');
 });
 
+test('the line map draws the whole route, your train and the traffic', () => {
+  app.startCity('chennai', 'local');
+  const rail = env.elements.get('mapRail');
+  const stations = app.world.stationsOnPath[app.world.service.line];
+  const ticks = rail.children.filter((c) => c.className.startsWith('railtick'));
+  assert.equal(ticks.length, stations.length, 'every station on the line gets a tick');
+  assert.equal(env.elements.get('mapLine').textContent, 'South Line');
+  assert.match(env.elements.get('mapMeta').textContent, /^\d+ stations · \d+\.\d km$/);
+
+  const me = rail.children.find((c) => c.className === 'railmark me');
+  assert.ok(me, 'the player has a marker');
+  const traffic = rail.children.filter((c) => c.className === 'railmark ai');
+  assert.equal(traffic.length, app.world.trains.filter((t) => t.pathId === app.world.service.line).length - 1);
+
+  const before = me.style.left;
+  app.tick(4000);
+  assert.notEqual(me.style.left, before, 'the marker follows the train');
+  assert.ok(me.style.left.endsWith('%'));
+});
+
 test('the picker survives a browser without WebGL', () => {
   app.startCity('mumbai', 'express');
   const broken = bootApp({
