@@ -1,69 +1,79 @@
 # Train Driver — Indian Locals
 
 A browser driving sim: you sit in the cab of a real 3D railway, on four
-different networks in four different cities, running locals and
-long-distance expresses to a timetable.
+different networks in four different cities, running suburban locals, loco-
+hauled passengers and long-distance expresses to a timetable.
 
 No build step and no CDN. three.js is vendored in `vendor/`, so the game runs
 from any static server, offline.
 
 ```bash
 npm start     # http://localhost:5173
-npm test      # 44 node tests: cities, sim, 3D scene, headless app boot
+npm test      # 46 node tests: cities, sim, 3D scene, headless app boot
 python3 -m unittest discover -s test   # 27 tests for auth.py
 ```
 
 | | |
 | --- | --- |
-| ![Mumbai](docs/cab-mumbai.png) | ![Delhi](docs/cab-delhi.png) |
-| *Mumbai — Western Line, from the cab* | *Delhi — Ring Railway on approach* |
-| ![Kolkata](docs/lineside-kolkata.png) | ![Chennai](docs/chase-chennai.png) |
-| *Kolkata — lineside camera* | *Chennai — chase camera* |
+| ![The picker](docs/menu.png) | ![Drive menu](docs/services.png) |
+| *Pick a city — every one runs three real lines* | *Then pick your train: local, passenger or express* |
+| ![Mumbai cab](docs/cab-mumbai.png) | ![Kolkata chase](docs/chase-kolkata.png) |
+| *Mumbai — Western Line, from the cab* | *Kolkata — chase camera off the shoulder* |
+| ![Chennai lineside](docs/lineside-chennai.png) | ![Mumbai network](docs/network-mumbai.png) |
+| *Chennai — a nine-car local at a halt* | *Mumbai — Western, Central and Harbour in one corridor* |
 
-## Four cities, four locals
+## Four cities, three real lines each
 
-Choose on the title card — click a row or press `1`–`4`. Each city builds its
-own railway from its own seed, and runs its own rolling stock.
+Choose a city on the title card — click a row or press `1`–`4` — then choose
+which train to drive on its Drive menu. Each city grows its own network from
+its own seed, and its lines run as parallel corridors, so from the cab you can
+see the next line's masts, platforms and trains.
 
-| City | Line | Locals | Long-distance | Livery |
+| City | Lines | Local | Passenger | Express |
 | --- | --- | --- | --- | --- |
-| Mumbai | Western Line | 12-car EMU | 18-coach Saurashtra Express | maroon, blue doors |
-| Delhi | Ring Railway | 8-car EMU | 20-coach Rajdhani Express | blue, yellow band |
-| Kolkata | Circular Railway | 9-car EMU | 17-coach Duronto Express | deep blue, cream |
-| Chennai | South Line | 9-car EMU | 19-coach Coromandel Express | green, yellow ends |
+| Mumbai | Western · Central · Harbour | 12-car EMU, Western | Panvel Passenger, Central (ICF · WAP-4) | Mumbai Rajdhani, Central (18 LHB · WAP-7) |
+| Delhi | Ring · Gurgaon · Ghaziabad | 8-car EMU, Ring | Rewari Passenger, Gurgaon (ICF · WAP-4) | Bhopal Shatabdi, Ghaziabad (20 LHB · WAP-5) |
+| Kolkata | Circular · Sealdah South · Howrah Main | 9-car EMU, Circular | Bandel Passenger, Sealdah (ICF · WAP-4) | Howrah Duronto, Howrah (17 LHB · WAP-7) |
+| Chennai | South · North · MRTS | 9-car EMU, South | Arakkonam Passenger, North (ICF · WAP-4) | Coromandel Express, North (19 LHB · WAP-7) |
 
-**Locals** are electric multiple units: cab end, rows of sliding doors, window
-band, curved roof. **Long-distance services are locomotive-hauled** — a painted
-locomotive with a nose, lamps and a pantograph, then 17–20 coaches with end
-walls, vestibules, roof ribs and bogies. The express is always far longer than
-the local on the same line, and it is the train you start in.
+**Three different machines, not three liveries.** A local is an EMU: flat cab
+end, four doors a side, white body with the city's band, twelve cars in Mumbai
+and eight or nine elsewhere, quick away and 20–21 m/s flat out. A passenger is
+a WAP-4 and ten cream ICF coaches: ribbed sides, slow off the mark, stops at
+every station. An express is a WAP-7 (or a WAP-5 in Delhi) and 17–20 LHB
+coaches: navy or maroon sealed stock, 28–29 m/s, stops only at the majors.
 
-Every network has a trunk line and a branch that leaves it at a junction, with
-six trains working it: the express you drive, a superfast, three locals and a
-branch shuttle.
+Every network carries seven trains — yours, a superfast coming the other way,
+a local ahead of you, and a local plus a passenger on each of the other two
+lines — all held apart by block signals and a braking curve.
 
-![The picker](docs/menu.png)
+The stations are real: Churchgate, Mumbai Central, Dadar, Kurla, Thane, Kalyan;
+Nizamuddin, Safdarjung, Gurgaon, Ghaziabad; Dum Dum, Bara Bazar, Eden Gardens,
+Majerhat, Sealdah, Howrah, Bandel; Beach, Egmore, Guindy, Tambaram, Avadi,
+Velachery. 58 stations in Mumbai alone, each with two platforms, a name board
+in the line's colour, and a canopy or a halt shelter depending on its size.
 
 ## The view
 
-Three cameras, cycled with **C** (or drag the scene to swing the lineside
-camera around):
+Three cameras, cycled with **C** (drag the scene to swing the lineside camera):
 
-* **cab** — first person, at the head of the train, with the windscreen frame,
-  A-pillars and headlining drawn in 3D around you;
-* **chase** — just above the roof, looking down the train;
-* **lineside** — orbit the train from the lineside and watch it go past.
+* **cab** — first person in a built cab: windscreen frame, pillars, dash,
+  traction and brake handles, headlining, and a bonnet you can see over;
+* **chase** — a drone off the loco's shoulder, high enough to clear the coach
+  roofs and pitched down the line so you can still drive on it;
+* **lineside** — stand off the track and watch the whole 200–400 m rake go by.
 
-The HUD carries the analogue speedo, the power and brake levers, lamp
+The HUD carries the analogue speedo, the power and brake notch levers, lamp
 repeaters (doors, signal, limit, horn), the next stop with distance and the
-three after it, plus the clock and the score.
+green-zone chip, the score and the run's message log.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| `W` / `↑` | power |
-| `S` / `↓` | brake |
+| `W` / `↑` | power notch up (8 notches) |
+| `S` / `↓` | brake notch up (8 notches) |
+| `X` | release both levers |
 | `Space` | emergency brake |
 | `D` | doors, at a platform |
 | `H` | horn (two-tone, synthesised) |
@@ -75,21 +85,27 @@ three after it, plus the clock and the score.
 
 ## How it works
 
-* `src/cities.js` — the four cities: stations, liveries, palettes, seeds.
-* `src/world.js` — grows a network from a city seed: trunk, branch, station
-  records, signals, and a fleet with routes resolved in the direction of travel.
-* `src/sim.js` — metres per second throughout; braking-curve AI that stops at
-  the board, block signals that consider only the asking direction, doors that
-  only release at a platform, and traffic that holds its distance instead of
-  rear-ending itself.
+* `src/cities.js` — the four cities: three lines each with their stations,
+  palettes, seeds, and the three rakes (EMU / ICF / LHB) a city owns.
+* `src/world.js` — grows the network from a city seed: one base alignment, then
+  each line offset into its own corridor, station records per line, signals,
+  and a fleet with routes resolved in the direction of travel.
+* `src/sim.js` — metres per second throughout; notched driving, braking-curve
+  AI that stops at the board, block signals that consider only the asking
+  direction, doors that release only at a platform, green-zone scoring with
+  penalties and bonuses, and traffic that holds its distance.
 * `src/scene3d.js` — the 3D world: ballast, rails, instanced sleepers, catenary
-  masts and wire, platforms with canopy and name boards, station buildings,
-  lineside trees and town blocks, signal lamps, rolling stock and the cab.
-* `src/app.js` — boot, cities, input, cameras, HUD, horn, pause.
+  masts and wire, platforms with canopy and name boards tinted to the line,
+  station buildings (only at major stations), lineside trees and town blocks,
+  signal lamps, instanced rolling stock, and the cab interior.
+* `src/app.js` — boot, city and Drive menus, input, cameras, HUD, horn, pause,
+  run summary.
 
-Rendering is plain three.js WebGL. The tests boot the real app headlessly with
-a renderer stub, and the scene tests count meshes and triangles in every city
-so an empty world cannot pass.
+Rendering is plain three.js WebGL, one draw call per coach part thanks to
+instancing. The tests boot the real app headlessly with a renderer stub and the
+scene tests count meshes and triangles in every city, so an empty world cannot
+pass. Booting a second app detaches the first one's listeners, so the menu
+stays driveable when the page is re-booted.
 
 ## auth.py
 

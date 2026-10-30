@@ -5,7 +5,7 @@
  */
 
 import * as THREE from '../vendor/three.module.js';
-import { CITIES, getCity } from './cities.js';
+import { CITIES, LOCOS, getCity, getService, liveryFor } from './cities.js';
 import { createWorld } from './world.js';
 import { buildWorld3D, updateWorld3D, cameraPose, createRenderer, moveCab } from './scene3d.js';
 import {
@@ -17,6 +17,10 @@ const $ = (id) => document.getElementById(id);
 
 const CAMERA_MODES = ['cab', 'chase', 'lineside'];
 const CAMERA_LABELS = { cab: 'cab', chase: 'chase', lineside: 'lineside' };
+
+// Only the newest boot listens for input. Booting twice happens in the tests
+// and must never leave a stale handler driving the same page.
+let activeApp = null;
 
 export function bootApp(options = {}) {
   const makeRenderer = options.createRenderer || createRenderer;
@@ -43,7 +47,14 @@ export function bootApp(options = {}) {
     distance: 52,
   };
 
-  const controls = { throttle: false, brake: false, hazard: false, autopilot: false };
+  const controls = {
+    power: 0, brakeNotch: 0, hazard: false, autopilot: false,
+    get throttle() { return this.power > 0; },
+    get brake() { return this.brakeNotch > 0; },
+  };
+  const NOTCHES = 8;
+  let serviceId = options.service || 'express';
+  let pendingCity = options.city || 'mumbai';
 
   let audio = null;
   function horn(on) {
@@ -83,6 +94,7 @@ export function bootApp(options = {}) {
   let tickerUntil = 0;
   let lastTicker = '';
   let hudClock = 0;
+  let summaryShown = false;
 
   /* ------------------------------- shell ------------------------------- */
 
@@ -113,6 +125,15 @@ export function bootApp(options = {}) {
     titleBtn: $('titleBtn'),
     pauseStats: $('pauseStats'),
     cityBtn: $('cityBtn'),
+    stopZone: $('stopZone'),
+    servicePanel: $('servicePanel'),
+    serviceName: $('serviceName'),
+    powerNotch: $('powerNotch'),
+    brakeNotch: $('brakeNotch'),
+    messageList: $('messageList'),
+    summary: $('overlaySummary'),
+    summaryBody: $('summaryBody'),
+    summaryNext: $('summaryNext'),
   };
 
   const show = (node, visible) => {
@@ -129,6 +150,8 @@ export function bootApp(options = {}) {
     CITIES.forEach((city, index) => {
       const localStock = city.stock?.local || { cars: 9 };
       const expressStock = city.stock?.express || { cars: 18, name: 'Express' };
+      const localLivery = liveryFor(city, 'emu');
+      const expressLivery = liveryFor(city, 'lhb');
 
       const card = document.createElement('button');
       card.type = 'button';
@@ -139,11 +162,11 @@ export function bootApp(options = {}) {
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
       const localBand = document.createElement('i');
-      localBand.style.background = city.livery.local;
+      localBand.style.background = localLivery.body;
       const expressBand = document.createElement('i');
-      expressBand.style.background = city.express.body;
+      expressBand.style.background = expressLivery.body;
       const locoBand = document.createElement('i');
-      locoBand.style.background = city.express.loco?.body || city.express.body;
+      locoBand.style.background = expressLivery.stripe;
       swatch.append(localBand, expressBand, locoBand);
 
       const key = document.createElement('span');
@@ -153,11 +176,11 @@ export function bootApp(options = {}) {
       const name = document.createElement('strong');
       name.textContent = city.city;
       const line = document.createElement('em');
-      line.textContent = city.line;
+      line.textContent = city.lines.map((l) => l.name).join(' · ');
 
       const fleet = document.createElement('span');
       fleet.className = 'fleet';
-      fleet.textContent = `${localStock.cars}-car locals · ${expressStock.cars}-coach ${expressStock.name || 'express'}`;
+      fleet.textContent = `${city.lines.length} lines · ${localStock.cars}-car locals · ${expressStock.cars}-coach express`;
 
       const blurb = document.createElement('span');
       blurb.className = 'blurb';
@@ -174,35 +197,162 @@ export function bootApp(options = {}) {
       card.append(key, swatch, body, go);
       card.addEventListener('click', (event) => {
         event.preventDefault();
-        startCity(city.id);
+        showServices(city.id);
       });
       el.cityCards.appendChild(card);
     });
   }
 
-
-  function startCity(cityId) {
+  /** The Drive menu: pick which service to run on this line. */
+  function showServices(cityId) {
+    pendingCity = cityId;
     const city = getCity(cityId);
-    world = createWorld({ city: city.id });
+    if (!el.servicePanel) return;
+    el.servicePanel.innerHTML = '';
+
+    const card = document.createElement('div');
+    card.className = 'card wide';
+    el.servicePanel.appendChild(card);
+
+    const heading = document.createElement('p');
+    heading.className = 'studio';
+    heading.textContent = `${city.city} · ${city.lines.map((l) => l.name).join(' · ')}`;
+    card.appendChild(heading);
+
+    const list = document.createElement('div');
+    list.className = 'cities';
+
+    for (const service of city.services) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'city service';
+      card.dataset.service = service.id;
+
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = service.type === 'local' ? 'LOCAL' : service.type === 'passenger' ? 'PASSENGER' : 'EXPRESS';
+
+      const swatch = document.createElement('span');
+      swatch.className = 'swatch';
+      const rake = liveryFor(city, service.stock);
+      const bands = service.loco
+        ? [rake.body, rake.stripe, (LOCOS[service.loco] || {}).body || rake.body]
+        : [rake.body, rake.stripe, rake.door];
+      for (const colour of bands) {
+        const b = document.createElement('i');
+        b.style.background = colour;
+        swatch.appendChild(b);
+      }
+
+      const body = document.createElement('span');
+      body.className = 'body';
+      const name = document.createElement('strong');
+      name.textContent = service.name;
+      const line = document.createElement('em');
+      line.textContent = `${service.lineName} · ${service.kindLabel}`;
+      const fleet = document.createElement('span');
+      fleet.className = 'fleet';
+      fleet.textContent = `${service.cars}-coach rake · ${Math.round(service.vmax * 3.6)} km/h · `
+        + (service.stops === 'majors' ? 'principal stops' : 'all stations');
+      const blurb = document.createElement('span');
+      blurb.className = 'blurb';
+      blurb.textContent = service.blurb;
+      body.append(name, line, fleet, blurb);
+
+      const go = document.createElement('span');
+      go.className = 'go';
+      go.textContent = '▶';
+
+      card.append(badge, swatch, body, go);
+      card.addEventListener('click', (event) => {
+        event.preventDefault();
+        startCity(city.id, service.id);
+      });
+      list.appendChild(card);
+    }
+
+    card.appendChild(list);
+
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'ghost';
+    back.textContent = '← back to cities';
+    back.addEventListener('click', () => {
+      show(el.servicePanel, false);
+      el.servicePanel.setAttribute('hidden', '');
+      show(el.overlayTitle, true);
+    });
+    card.appendChild(back);
+
+    show(el.overlayTitle, false);
+    el.servicePanel.removeAttribute('hidden');
+    show(el.servicePanel, true);
+  }
+
+
+  function startCity(cityId, nextServiceId = serviceId) {
+    const city = getCity(cityId);
+    serviceId = nextServiceId;
+    const service = getService(city, serviceId);
+    world = createWorld({ city: city.id, service: service.id });
     view = buildWorld3D(world);
-    setPlayer(world, 'exp1');
-    controls.throttle = false;
-    controls.brake = false;
+    setPlayer(world, world.trains[0].id);
+    controls.power = 0;
+    controls.brakeNotch = 0;
     controls.hazard = false;
     controls.autopilot = false;
     ui.paused = false;
     ui.mode = 'cab';
     ui.orbit = 0.7;
+    summaryShown = false;
+    show(el.summary, false);
 
     if (el.cityName) el.cityName.textContent = city.city;
-    if (el.lineName) el.lineName.textContent = city.line;
+    if (el.lineName) el.lineName.textContent = service.lineName || city.lines[0].name;
     show(el.overlayTitle, false);
+    show(el.servicePanel, false);
     show(el.overlayPause, false);
     show(el.hud, true);
+    if (el.serviceName) el.serviceName.textContent = `${service.name} · ${service.kindLabel}`;
     resize();
     updateWorld3D(view, world);
-    pushTicker(`${city.city} · ${city.line} — ${playerTrain(world).name} ready`, 'info', 4);
+    pushTicker(`${service.name} · ${service.cars} coaches · ready to depart`, 'info', 4);
     return world;
+  }
+
+  function showSummary() {
+    if (!el.summary) return;
+    const train = playerTrain(world);
+    const broken = {};
+    for (const p of world.penalties) broken[p.category] = (broken[p.category] || 0) + p.amount;
+
+    el.summaryBody.innerHTML = '';
+    const lead = document.createElement('p');
+    lead.className = 'lede';
+    lead.textContent = `${train.name} · ${train.stats.stops} stops · `
+      + `${train.stats.missed} missed · ${Math.round(world.delivered)} passengers carried`;
+    el.summaryBody.appendChild(lead);
+
+    const score = document.createElement('p');
+    score.className = 'bigscore';
+    score.textContent = String(Math.round(world.score));
+    el.summaryBody.appendChild(score);
+
+    const list = document.createElement('ul');
+    list.className = 'breakdown';
+    for (const [category, amount] of Object.entries(broken)) {
+      const li = document.createElement('li');
+      li.textContent = `${category}: ${Math.round(amount)}`;
+      list.appendChild(li);
+    }
+    if (!list.children.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No penalties — a clean run.';
+      list.appendChild(li);
+    }
+    el.summaryBody.appendChild(list);
+
+    show(el.summary, true);
   }
 
   function backToTitle() {
@@ -241,8 +391,10 @@ export function bootApp(options = {}) {
     if (el.limit) el.limit.textContent = String(limit);
     if (el.clock) el.clock.textContent = formatClock(world.time);
     if (el.score) el.score.textContent = String(Math.round(world.score));
-    if (el.power) el.power.style.height = `${Math.round(Math.min(1, train.throttle || 0) * 100)}%`;
-    if (el.brake) el.brake.style.height = `${Math.round(Math.min(1, train.braking || 0) * 100)}%`;
+    if (el.power) el.power.style.height = `${Math.round((controls.power / NOTCHES) * 100)}%`;
+    if (el.brake) el.brake.style.height = `${Math.round((controls.brakeNotch / NOTCHES) * 100)}%`;
+    if (el.powerNotch) el.powerNotch.textContent = String(controls.power);
+    if (el.brakeNotch) el.brakeNotch.textContent = String(controls.brakeNotch);
     if (el.camName) el.camName.textContent = CAMERA_LABELS[ui.mode] || ui.mode;
 
     if (stop) {
@@ -263,6 +415,35 @@ export function bootApp(options = {}) {
         li.textContent = name;
         el.stopList.appendChild(li);
       }
+    }
+
+    if (el.messageList) {
+      const recent = world.messages.slice(-3).reverse();
+      const signature = recent.map((m) => m.text).join('|');
+      if (signature !== el.messageList.__sig) {
+        el.messageList.__sig = signature;
+        el.messageList.innerHTML = '';
+        for (const m of recent) {
+          const row = document.createElement('li');
+          row.className = m.amount < 0 ? 'bad' : m.amount > 0 ? 'good' : 'info';
+          const cat = document.createElement('b');
+          cat.textContent = m.category;
+          const txt = document.createElement('span');
+          txt.textContent = m.text;
+          const amt = document.createElement('i');
+          amt.textContent = m.amount ? `${m.amount > 0 ? '+' : ''}${m.amount}` : '';
+          row.append(cat, txt, amt);
+          el.messageList.appendChild(row);
+        }
+      }
+    }
+
+    // the green zone: how close the board is, so the stop can be planned
+    if (el.stopZone) {
+      const d = stop ? stationDistance(train, stop) : 9999;
+      const inZone = Math.abs(d) <= 18;
+      el.stopZone.classList.toggle('in', inZone);
+      el.stopZone.style.opacity = d >= 0 && d < 700 ? '1' : '0.35';
     }
 
     setLamp(el.lampDoors, train.state === 'dwell' && train.doors > 0.15);
@@ -292,9 +473,9 @@ export function bootApp(options = {}) {
   function togglePause() {
     if (!world) return;
     ui.paused = !ui.paused;
-    show(el.overlayPause, ui.paused);
-    controls.throttle = false;
-    controls.brake = false;
+    if (!summaryShown) show(el.overlayPause, ui.paused);
+    controls.power = 0;
+    controls.brakeNotch = 0;
     controls.hazard = false;
     if (ui.paused && el.pauseStats) {
       const train = playerTrain(world);
@@ -304,29 +485,50 @@ export function bootApp(options = {}) {
     }
   }
 
-  const DRIVE_KEYS = new Set(['KeyW', 'KeyS', 'Space', 'ArrowUp', 'ArrowDown', 'KeyD']);
+  const DRIVE_KEYS = new Set(['KeyW', 'KeyS', 'Space', 'ArrowUp', 'ArrowDown', 'KeyD', 'KeyX']);
+
+  function notchPower(step) {
+    controls.power = Math.max(0, Math.min(NOTCHES, controls.power + step));
+    if (controls.power > 0) controls.brakeNotch = 0;
+  }
+
+  function notchBrake(step) {
+    controls.brakeNotch = Math.max(0, Math.min(NOTCHES, controls.brakeNotch + step));
+    if (controls.brakeNotch > 0) controls.power = 0;
+  }
 
   function onKeyDown(e) {
     if (e.repeat) return;
     keys.add(e.code);
-    if (!world) return;
 
     // on the title card, 1-4 pick a city
+    const serviceOpen = el.servicePanel && !el.servicePanel.classList.contains('hidden');
+    if (serviceOpen) {
+      const n = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];
+      if (n !== undefined) {
+        const sv = getCity(pendingCity || 'mumbai').services[n];
+        if (sv) startCity(pendingCity, sv.id);
+      }
+      return;
+    }
+
     const menuOpen = !el.overlayTitle.classList.contains('hidden');
     if (menuOpen) {
       const n = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 }[e.code];
       if (n !== undefined && CITIES[n]) {
         e.preventDefault();
-        startCity(CITIES[n].id);
+        showServices(CITIES[n].id);
       }
       return;
     }
 
     switch (e.code) {
       case 'KeyW': case 'ArrowUp':
-        controls.throttle = true; e.preventDefault(); break;
+        notchPower(1); e.preventDefault(); break;
       case 'KeyS': case 'ArrowDown':
-        controls.brake = true; e.preventDefault(); break;
+        notchBrake(1); e.preventDefault(); break;
+      case 'KeyX':
+        controls.power = 0; controls.brakeNotch = 0; break;
       case 'Space':
         controls.hazard = true; e.preventDefault(); break;
       case 'KeyD':
@@ -363,8 +565,6 @@ export function bootApp(options = {}) {
     keys.delete(e.code);
     if (!world) return;
     switch (e.code) {
-      case 'KeyW': case 'ArrowUp': controls.throttle = false; break;
-      case 'KeyS': case 'ArrowDown': controls.brake = false; break;
       case 'Space': controls.hazard = false; break;
       case 'KeyH': horn(false); break;
       default: break;
@@ -432,6 +632,11 @@ export function bootApp(options = {}) {
 
     drawFrame(dt);
 
+    if (world.finished && !summaryShown) {
+      summaryShown = true;
+      showSummary();
+    }
+
     hudClock += dt;
     if (hudClock > 0.08) { hudClock = 0; updateHud(); }
   }
@@ -459,7 +664,31 @@ export function bootApp(options = {}) {
 
   if (el.resumeBtn) el.resumeBtn.addEventListener('click', togglePause);
   if (el.cityBtn) el.cityBtn.addEventListener('click', backToTitle);
+  if (el.summaryNext) {
+    el.summaryNext.addEventListener('click', () => {
+      show(el.summary, false);
+      backToTitle();
+    });
+  }
   if (el.titleBtn) el.titleBtn.addEventListener('click', backToTitle);
+
+  function detach() {
+    if (typeof window !== 'undefined' && window.removeEventListener) {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('resize', resize);
+    }
+    if (canvas && canvas.removeEventListener) {
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerUp);
+      canvas.removeEventListener('wheel', onWheel);
+    }
+  }
+  if (activeApp) activeApp.detach();
+  activeApp = { detach };
+
   if (typeof window !== 'undefined') {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -475,7 +704,7 @@ export function bootApp(options = {}) {
   resize();
 
   const api = {
-    start, startCity, backToTitle, tick, updateHud, togglePause, cycleCamera,
+    start, startCity, backToTitle, tick, updateHud, togglePause, cycleCamera, stop: detach,
     rendererError,
     ui, controls, keys, camera, renderer,
     get world() { return world; },

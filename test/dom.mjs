@@ -50,6 +50,12 @@ class Element {
     };
   }
 
+  removeEventListener(type, fn) {
+    const list = this.listeners.get(type) || [];
+    const i = list.indexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+  }
+
   addEventListener(type, fn) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type).push(fn);
@@ -85,6 +91,16 @@ class Element {
 
   get innerHTML() {
     return this.html || '';
+  }
+
+  removeAttribute(name) {
+    delete this[name];
+    if (name === 'hidden') this.hidden = false;
+  }
+
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === 'hidden') this.hidden = true;
   }
 
   get offsetWidth() { return 120; }
@@ -134,6 +150,11 @@ export function installDom() {
     addEventListener(type, fn) {
       if (!windowListeners.has(type)) windowListeners.set(type, []);
       windowListeners.get(type).push(fn);
+    },
+    removeEventListener(type, fn) {
+      const list = windowListeners.get(type) || [];
+      const i = list.indexOf(fn);
+      if (i >= 0) list.splice(i, 1);
     },
     devicePixelRatio: 1,
     innerWidth: 1280,

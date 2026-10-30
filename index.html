@@ -14,6 +14,7 @@
       <div class="place">
         <span class="eyebrow" id="cityName">Mumbai</span>
         <strong class="line" id="lineName">Western Line</strong>
+        <span class="service" id="serviceName">Mumbai Rajdhani</span>
       </div>
       <div class="status">
         <span class="clock" id="clock">06:00</span>
@@ -23,6 +24,7 @@
         <span class="eyebrow">next stop</span>
         <strong id="nextName">Churchgate</strong>
         <span class="dist" id="nextDist">—</span>
+        <span class="zone" id="stopZone"><i></i>green zone 18 m</span>
         <ol class="stops" id="stopList"></ol>
       </div>
     </header>
@@ -49,11 +51,11 @@
 
         <div class="levers">
           <div class="lever">
-            <span>power</span>
+            <span>power <b id="powerNotch">0</b></span>
             <div class="track"><i id="powerBar"></i></div>
           </div>
           <div class="lever">
-            <span>brake</span>
+            <span>brake <b id="brakeNotch">0</b></span>
             <div class="track brake"><i id="brakeBar"></i></div>
           </div>
         </div>
@@ -61,11 +63,12 @@
 
       <div class="meta">
         <span class="cam" id="camName">cab</span>
-        <span class="hint">C camera · TAB train · T autopilot</span>
+        <span class="hint">W/S notch · X release · C camera · H horn</span>
         <button class="chip" type="button" id="cityBtn">change city</button>
       </div>
     </footer>
 
+    <ul class="messages" id="messageList"></ul>
     <div class="ticker" id="ticker"></div>
   </main>
 
@@ -74,14 +77,27 @@
       <p class="studio">Indian Locals · Four Cities of Track</p>
       <h1>TRAIN DRIVER</h1>
       <p class="lede">
-        Choose a line. You start in the cab of a long-distance express — a
-        locomotive and a full rake of coaches — with locals, fast services and
-        a branch shuttle working the same rails around you.
+        Every city runs three real lines. Pick the city, then pick your train:
+        a suburban local, a loco-hauled passenger, or a long express — each
+        with its own stock, its own stops and its own place in the timetable.
       </p>
 
       <div class="cities" id="cityCards"></div>
 
-      <p class="hint">Click a line, or press 1 – 4</p>
+      <p class="hint">Click a line, or press 1 – 4 · then choose your train</p>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="servicePanel"></div>
+
+  <div class="overlay hidden" id="overlaySummary">
+    <div class="card">
+      <p class="studio">End of the run</p>
+      <h2>Arrived</h2>
+      <div id="summaryBody"></div>
+      <div class="buttons">
+        <button class="primary" type="button" id="summaryNext">Take another service</button>
+      </div>
     </div>
   </div>
 

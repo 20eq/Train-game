@@ -8,7 +8,7 @@
  */
 
 import { buildPath, sample } from './geo.js';
-import { getCity, stockFor } from './cities.js';
+import { getCity, getService, stockFor, LOCOS } from './cities.js';
 
 export const COACH_LEN = 19;
 export const LOCO_LEN = 21;
@@ -69,97 +69,141 @@ function stationsFor(path, defs, pathId, majorEvery = 3) {
   });
 }
 
-/** The branch leaves a trunk station and curves away to a terminus. */
-function branchFrom(rand, trunk, junction) {
-  const head = sample(trunk, junction.s).angle;
-  const side = rand() > 0.5 ? 1 : -1;
-  const pts = [{ x: junction.x, y: junction.y }];
-  let a = head + side * 0.55;
-  let x = junction.x;
-  let y = junction.y;
-  const segments = 7;
-  const step = 240 + rand() * 60;
-  for (let i = 0; i < segments; i++) {
-    a += (rand() - 0.5) * 0.34 + side * 0.045;
-    x += Math.cos(a) * step;
-    y += Math.sin(a) * step;
-    pts.push({ x, y });
-  }
-  return buildPath(pts, 16);
+/** Offset a polyline sideways, keeping the corridor shape shared. */
+function offsetLine(pts, offset, wobble) {
+  return pts.map((p, i) => {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = dy / len;
+    const ny = -dx / len;
+    const push = offset + Math.sin(i * 0.55 + wobble) * 40;
+    return { x: p.x + nx * push, y: p.y + ny * push };
+  });
 }
 
-function fleetFor(city, paths, onPath) {
-  const main = onPath.main;
-  const branch = onPath.branch;
-  const first = main[0].name;
-  const last = main[main.length - 1].name;
-  const mid = main[Math.floor(main.length / 2)].name;
-  const localStock = stockFor(city, 'local');
-  const expressStock = stockFor(city, 'express');
+/** The trains keeping to the timetable, spread over every line in the city. */
+function fleetFor(city, paths, onPath, service) {
+  const trains = [];
+  const stock = (kind) => stockFor(city, kind);
+  const playerLine = service.line;
 
-  const mk = (def) => ({
+  const mk = (def) => trains.push({
     kind: 'local',
-    cars: localStock.cars,
-    vmax: 24,
+    cars: stock('local').cars,
+    vmax: 22,
     dir: 1,
     route: 'all',
-    livery: 'local',
     ai: true,
     ...def,
   });
 
-  return [
-    // two long-distance workings: a locomotive and a full rake of coaches
-    mk({ id: 'exp1', name: expressStock.name || `${city.city} Express`, kind: 'express',
-      path: 'main', cars: expressStock.cars, vmax: 28,
-      dir: 1, at: 0.03, route: 'majors', livery: 'express', startAtPlatform: true, ai: false }),
-    mk({ id: 'exp2', name: `${city.city} Superfast`, kind: 'express', path: 'main',
-      cars: Math.max(10, Math.round(expressStock.cars * 0.7)), vmax: 27,
-      dir: -1, at: 0.86, route: 'majors', livery: 'express' }),
-    mk({ id: 'loc1', name: `${last} Local`, path: 'main', vmax: 22, dir: 1, at: 0.16 }),
-    mk({ id: 'loc2', name: `${first} Local`, path: 'main', vmax: 22, dir: -1, at: 0.7 }),
-    mk({ id: 'loc3', name: `${mid} Local`, path: 'main', cars: Math.max(6, localStock.cars - 3),
-      vmax: 20, dir: 1, at: 0.52 }),
-    mk({ id: 'br1', name: `${branch[branch.length - 1].name} Shuttle`, path: 'branch', cars: 6, vmax: 20,
-      dir: 1, at: 0.12 }),
-  ].filter((def) => paths[def.path]);
+  // ---- the train you chose to drive -----------------------------------
+  const playerLineStations = onPath[playerLine] || onPath[Object.keys(paths)[0]];
+  trains.push({
+    id: 'player',
+    name: service.name,
+    kind: service.type === 'express' ? 'express' : service.type === 'passenger' ? 'passenger' : 'local',
+    path: playerLine,
+    cars: service.cars,
+    vmax: service.vmax,
+    accel: service.accel,
+    brake: service.brake,
+    dir: 1,
+    at: 0.02,
+    route: service.stops,
+    livery: service.stock,
+    startAtPlatform: true,
+    ai: false,
+    stock: service.stock,
+    loco: service.loco,
+    line: playerLine,
+    lineName: service.lineName,
+  });
+
+  // ---- traffic: two workings on every line ----------------------------
+  for (const line of city.lines) {
+    const list = onPath[line.id];
+    if (!list || !list.length) continue;
+    const first = list[0].name;
+    const last = list[list.length - 1].name;
+    const mid = list[Math.floor(list.length / 2)].name;
+    const expressStock = stock('express');
+    const localStock = stock('local');
+
+    const short = line.name.replace(/ Line$/, '');
+    if (line.id === playerLine) {
+      // somebody coming the other way, and a slow local in front of you
+      mk({ id: `${line.id}-exp`, name: `${short} Superfast`, kind: 'express', path: line.id,
+        cars: Math.max(10, Math.round(expressStock.cars * 0.65)), vmax: 27, dir: -1, at: 0.78,
+        route: 'majors', stock: 'lhb', loco: city.id === 'delhi' ? 'WAP5' : 'WAP7', line: line.id });
+      mk({ id: `${line.id}-loc`, name: `${short} Local`, path: line.id, cars: localStock.cars,
+        vmax: 20, dir: 1, at: 0.42, stock: 'emu', line: line.id });
+    } else {
+      mk({ id: `${line.id}-loc`, name: `${short} Local`, path: line.id, cars: localStock.cars,
+        vmax: 21, dir: -1, at: 0.55, stock: 'emu', line: line.id });
+      mk({ id: `${line.id}-pax`, name: `${short} Passenger`, kind: 'passenger', path: line.id,
+        cars: stock('passenger').cars, vmax: 21, dir: 1, at: 0.3,
+        route: 'all', stock: 'icf', loco: 'WAP4', line: line.id });
+    }
+  }
+
+  return trains;
 }
 
-export function createWorld({ city: cityId = 'mumbai', startWaiting = true, seed } = {}) {
+export function createWorld({ city: cityId = 'mumbai', service: serviceId = null, startWaiting = true, seed } = {}) {
   const city = getCity(cityId);
+  const service = getService(city, serviceId);
   const rand = makeRand(seed ?? city.seed);
 
-  const trunkPts = shiftTo(
+  // one base alignment per city, then each line is cut through the same
+  // corridor at its own offset — Western, Central and Harbour run side by
+  // side, which is what you see from the cab and from the lineside
+  const basePts = shiftTo(
     growLine(rand, { segments: 22, step: 268, turn: 0.42, heading: -0.7 }),
     380,
     420,
   );
-  const main = buildPath(trunkPts, 18);
-  const mainStations = stationsFor(main, city.stations, 'main');
 
-  const junction = mainStations[Math.max(1, Math.floor(mainStations.length * 0.34))];
-  const branchPath = branchFrom(rand, main, junction);
-  const branchDefs = city.branch.map(([name, at]) => [name, at]);
-  const branchStations = stationsFor(branchPath, branchDefs, 'branch');
-
-  const paths = { main };
-  const stationsOnPath = { main: mainStations };
-  paths.branch = branchPath;
-  stationsOnPath.branch = branchStations;
-
+  const paths = {};
+  const stationsOnPath = {};
   const stationById = new Map();
   const stations = [];
-  for (const list of Object.values(stationsOnPath)) {
+
+  city.lines.forEach((line, index) => {
+    const pts = offsetLine(basePts, line.offset, index * 1.7 + city.seed * 0.13);
+    const path = buildPath(pts, 18);
+    paths[line.id] = path;
+    const list = stationsFor(path, line.stations, line.id, line.majorEvery || 4);
     for (const st of list) {
-      // the junction is the same place on both lines: keep one record, remapped
-      if (st === branchStations[0]) {
-        st.name = junction.name;
-        st.major = true;
-      }
+      st.line = line.id;
+      st.lineName = line.name;
+      st.colour = line.colour;
+    }
+    stationsOnPath[line.id] = list;
+    for (const st of list) {
       stations.push(st);
       if (!stationById.has(st.id)) stationById.set(st.id, st);
     }
-  }
+  });
+
+  // a shared terminus keeps the three lines reading as one network
+  const termini = city.lines.map((l) => stationsOnPath[l.id][0]);
+  const hub = {
+    id: 'hub',
+    name: city.lines[0].stations[0][0],
+    pathId: city.lines[0].id,
+    s: termini[0].s,
+    x: termini.reduce((sum, st) => sum + st.x, 0) / termini.length,
+    y: termini.reduce((sum, st) => sum + st.y, 0) / termini.length,
+    angle: termini[0].angle,
+    major: true,
+    hub: true,
+    waiting: 0,
+    delivered: 0,
+  };
 
   if (startWaiting) {
     for (const st of stations) {
@@ -172,7 +216,7 @@ export function createWorld({ city: cityId = 'mumbai', startWaiting = true, seed
     : stationsOnPath[pathId]
   ).map((st) => st.id);
 
-  const trains = fleetFor(city, paths, stationsOnPath).map((def) => {
+  const trains = fleetFor(city, paths, stationsOnPath, service).map((def) => {
     const path = paths[def.path];
     const route = routeIds(def.path, def.route).map((id) => stationsOnPath[def.path].find((st) => st.id === id));
     let s = def.at * path.length;
@@ -207,14 +251,16 @@ export function createWorld({ city: cityId = 'mumbai', startWaiting = true, seed
       dir: def.dir,
       v: 0,
       vmax: def.vmax,
-      accel: def.kind === 'express' ? 1.05 : 1.3,
-      brake: def.kind === 'express' ? 1.6 : 1.9,
+      accel: def.accel ?? (def.kind === 'express' ? 1.05 : 1.3),
+      brake: def.brake ?? (def.kind === 'express' ? 1.6 : 1.9),
+      stock: def.stock || 'emu',
+      loco: def.loco || null,
+      locoSpec: LOCOS[def.loco] || null,
       coaches: def.cars,
       coachLen: COACH_LEN,
       locoLen: def.kind === 'express' ? LOCO_LEN : 0,
       length: def.cars * COACH_LEN + (def.kind === 'express' ? LOCO_LEN : 0),
-      capacity: def.cars * stockFor(city, def.kind === 'express' ? 'express' : 'local').capacity,
-      stock: stockFor(city, def.kind === 'express' ? 'express' : 'local'),
+      capacity: def.cars * (def.stock === 'icf' ? 90 : def.stock === 'emu' ? 112 : 72),
       onboard: 0,
       dest: new Map(),
       doors: atPlatform ? 0.4 : 0,
@@ -233,6 +279,7 @@ export function createWorld({ city: cityId = 'mumbai', startWaiting = true, seed
       message: '',
       messageT: 0,
       arriveAtStart: atPlatform,
+      lineName: def.lineName || city.lines.find((l) => l.id === def.path)?.name || '',
     };
   });
 
@@ -241,10 +288,12 @@ export function createWorld({ city: cityId = 'mumbai', startWaiting = true, seed
 
   return {
     city,
+    service,
     paths,
     stations,
     stationById,
     stationsOnPath,
+    hub,
     trains,
     bounds: {
       minX: Math.min(...xs), maxX: Math.max(...xs),
@@ -252,7 +301,10 @@ export function createWorld({ city: cityId = 'mumbai', startWaiting = true, seed
     },
     time: 6 * 3600,
     score: 0,
-    playerId: 'exp1',
+    messages: [],
+    penalties: [],
+    finished: false,
+    playerId: 'player',
     events: [],
     signals: {},
     collisions: 0,

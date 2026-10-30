@@ -9,6 +9,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { sample } from './geo.js';
+import { LOCOS, liveryFor } from './cities.js';
 import { computeSignals, playerTrain } from './sim.js';
 
 export const RAIL_HALF = 0.7175;
@@ -67,7 +68,11 @@ function scatter(rand, path, count, { minOff, maxOff, skip = [] }) {
 }
 
 /** A canvas-backed texture, used for station name boards. */
-function textTexture(text, { w = 512, h = 128, bg = '#12352c', fg = '#f3efe2', accent = '#ffcf5c' } = {}) {
+const boardCache = new Map();
+
+function textTexture(text, { w = 384, h = 96, bg = '#12352c', fg = '#f3efe2', accent = '#ffcf5c' } = {}) {
+  const key = `${text}|${accent}|${w}x${h}`;
+  if (boardCache.has(key)) return boardCache.get(key);
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -78,13 +83,20 @@ function textTexture(text, { w = 512, h = 128, bg = '#12352c', fg = '#f3efe2', a
   ctx.fillRect(0, 0, w, 10);
   ctx.fillRect(0, h - 10, w, 10);
   ctx.fillStyle = fg;
-  ctx.font = `700 ${Math.floor(h * 0.42)}px ui-sans-serif, system-ui, Helvetica, Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  // long names ("CHHATRAPATI SHIVAJI MAHARAJ TERMINUS") shrink to fit the board
+  let size = Math.floor(h * 0.44);
+  do {
+    ctx.font = `700 ${size}px ui-sans-serif, system-ui, Helvetica, Arial, sans-serif`;
+    if (ctx.measureText(text).width <= w * 0.9) break;
+    size -= 2;
+  } while (size > 14);
   ctx.fillText(text, w / 2, h / 2 + 2);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
+  boardCache.set(key, tex);
   return tex;
 }
 
@@ -281,13 +293,14 @@ function buildStation(scene, city, station) {
   const deckMat = new THREE.MeshLambertMaterial({ color: pal.platform });
   const edgeMat = new THREE.MeshLambertMaterial({ color: '#e8c46a' });
   const roofMat = new THREE.MeshLambertMaterial({ color: pal.roof });
-  const soffitMat = new THREE.MeshLambertMaterial({ color: '#c8c2b4' });
   const pillarMat = new THREE.MeshLambertMaterial({ color: '#8b8f88' });
   const wallMat = new THREE.MeshLambertMaterial({ color: pal.building });
+  const true_ = station.major;
 
   const deckGeo = new THREE.BoxGeometry(5.2, 0.95, PLATFORM_LEN);
   const edgeGeo = new THREE.BoxGeometry(0.55, 0.1, PLATFORM_LEN);
-  const roofGeo = new THREE.BoxGeometry(4.4, 0.18, PLATFORM_LEN * 0.3);
+  // a big station gets a full-length canopy; a halt gets a short shelter
+  const roofGeo = new THREE.BoxGeometry(4.4, 0.18, PLATFORM_LEN * (true_ ? 0.42 : 0.16));
   const pillarGeo = new THREE.BoxGeometry(0.2, 4.6, 0.2);
 
   for (const side of [-1, 1]) {
@@ -304,29 +317,44 @@ function buildStation(scene, city, station) {
     roof.position.set(x, 6.15, 0);
     g.add(roof);
 
-    for (let i = -2; i <= 2; i++) {
+    // support columns: three on a major station, two at a halt
+    const posts = true_ ? [-38, 0, 38] : [-14, 14];
+    for (const z of posts) {
       const pillar = new THREE.Mesh(pillarGeo, pillarMat);
-      pillar.position.set(side * 7.2, 2.3, i * 24);
+      pillar.position.set(side * 7.2, 2.3, z);
       g.add(pillar);
     }
 
-    // name board facing the track
+    // name board facing the track, underlined in the line's colour
     const board = new THREE.Mesh(
-      new THREE.PlaneGeometry(4.2, 1.05),
-      new THREE.MeshBasicMaterial({ map: textTexture(station.name.toUpperCase()), side: THREE.DoubleSide }),
+      new THREE.PlaneGeometry(4.6, 1.15),
+      new THREE.MeshBasicMaterial({
+        map: textTexture(station.name.toUpperCase(), { accent: station.colour || '#ffcf5c' }),
+        side: THREE.DoubleSide,
+      }),
     );
     board.position.set(x, 3.5, 0);
     board.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
     g.add(board);
 
-    // a little station building behind the platform
-    const h = station.major ? 9 : 6.5;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(9, h, 38), wallMat);
-    b.position.set(side * 25, h / 2, station.major ? 10 : -14);
-    g.add(b);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.45, 38.6), roofMat);
-    cap.position.set(side * 25, h + 0.22, station.major ? 10 : -14);
-    g.add(cap);
+    // a station building only where a station deserves one
+    if (true_) {
+      const h = 8.5;
+      const b = new THREE.Mesh(new THREE.BoxGeometry(9, h, 38), wallMat);
+      b.position.set(side * 25, h / 2, 10);
+      g.add(b);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.45, 38.6), roofMat);
+      cap.position.set(side * 25, h + 0.22, 10);
+      g.add(cap);
+    } else {
+      // a small hut and a bench, enough to read as a halt at speed
+      const hut = new THREE.Mesh(new THREE.BoxGeometry(4.6, 3.2, 6.5), wallMat);
+      hut.position.set(side * 17, 1.6, -6);
+      g.add(hut);
+      const hutCap = new THREE.Mesh(new THREE.BoxGeometry(5.1, 0.35, 7), roofMat);
+      hutCap.position.set(side * 17, 3.35, -6);
+      g.add(hutCap);
+    }
   }
 
   scene.add(g);
@@ -340,8 +368,8 @@ function buildLineside(scene, city, world) {
   const blocks = [];
   for (const [pathId, path] of Object.entries(world.paths)) {
     const skip = world.stationsOnPath[pathId] || [];
-    trees.push(...scatter(rand, path, pathId === 'main' ? 420 : 140, { minOff: 11, maxOff: 46, skip }));
-    blocks.push(...scatter(rand, path, pathId === 'main' ? 220 : 70, { minOff: 42, maxOff: 190, skip }));
+    trees.push(...scatter(rand, path, 300, { minOff: 11, maxOff: 46, skip }));
+    blocks.push(...scatter(rand, path, 150, { minOff: 42, maxOff: 190, skip }));
   }
 
   const m = new THREE.Matrix4();
@@ -444,25 +472,103 @@ function mat(key, color, extra) {
   return matCache.get(id);
 }
 
-/** Materials for a city's stock: local rakes and long-distance rakes differ. */
-export function stockMaterials(city, kind) {
-  const spec = kind === 'express' ? city.express : city.livery;
-  const loco = spec.loco || { body: spec.body, stripe: spec.stripe, roof: spec.roof, nose: spec.body };
+/** Materials for a city's stock: EMU, ICF passenger and LHB express differ. */
+export function stockMaterials(city, style) {
+  const spec = liveryFor(city, style);
+  const tag = `${city.id}-${style}`;
   return {
-    body: mat(`${city.id}-${kind}-body`, spec.body),
-    stripe: mat(`${city.id}-${kind}-stripe`, spec.stripe),
-    roof: mat(`${city.id}-${kind}-roof`, spec.roof),
-    door: mat(`${city.id}-${kind}-door`, spec.door || spec.body),
-    end: mat(`${city.id}-${kind}-end`, spec.end || spec.body),
-    glass: mat(`${city.id}-${kind}-glass`, '#1b2a33'),
-    pane: mat(`${city.id}-${kind}-pane`, '#9fc0d2'),
-    trim: mat(`${city.id}-${kind}-trim`, spec.trim || '#2c3a45'),
-    locoBody: mat(`${city.id}-${kind}-loco`, loco.body),
-    locoStripe: mat(`${city.id}-${kind}-locostripe`, loco.stripe),
-    locoRoof: mat(`${city.id}-${kind}-locoroof`, loco.roof),
-    locoNose: mat(`${city.id}-${kind}-loconose`, loco.nose || loco.body),
+    body: mat(`${tag}-body`, spec.body),
+    stripe: mat(`${tag}-stripe`, spec.stripe),
+    roof: mat(`${tag}-roof`, spec.roof),
+    door: mat(`${tag}-door`, spec.door || spec.body),
+    end: mat(`${tag}-end`, spec.end || spec.body),
+    glass: mat(`${tag}-glass`, '#1b2a33'),
+    pane: mat(`${tag}-pane`, '#9fc0d2'),
+    trim: mat(`${tag}-trim`, spec.trim || '#2c3a45'),
     lamp: new THREE.MeshBasicMaterial({ color: '#fff4d0', toneMapped: false }),
   };
+}
+
+/** A locomotive in its class livery: electric classes carry a pantograph. */
+function buildLoco(city, locoClass, isPlayer) {
+  const spec = LOCOS[locoClass] || LOCOS.WAP4;
+  const group = new THREE.Group();
+  const body = mat(`${city.id}-loco-${locoClass}`, spec.body);
+  const stripe = mat(`${city.id}-loco-${locoClass}-st`, spec.stripe);
+  const roof = mat(`${city.id}-loco-${locoClass}-rf`, spec.roof);
+  const nose = mat(`${city.id}-loco-${locoClass}-ns`, spec.nose);
+  const dark = mat('loco-dark', '#2b3134');
+
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(3.0, 3.1, 17.6), body);
+  shell.position.set(0, 2.9, -1.6);
+  group.add(shell);
+
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.86, 0.7, 17.0), dark);
+  skirt.position.set(0, 1.35, -1.6);
+  group.add(skirt);
+
+  const band = new THREE.Mesh(new THREE.BoxGeometry(3.04, 0.55, 15.0), stripe);
+  band.position.set(0, 3.55, -1.8);
+  group.add(band);
+
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.94, 1.5, 4.2), body);
+  cab.position.set(0, 3.6, 6.0);
+  group.add(cab);
+
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2.86, 0.5, 16.4), roof);
+  top.position.set(0, 4.55, -1.6);
+  group.add(top);
+
+  // nose and screen: the working end points up the line. The player's cab is
+  // built around this end of the loco, so its own face is left open for the
+  // interior to sit in.
+  if (!isPlayer) {
+    const front = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.6, 2.0), nose);
+    front.position.set(0, 2.5, 8.2);
+    group.add(front);
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.95, 0.14), mat('loco-glass', '#16232b'));
+    screen.position.set(0, 3.55, 9.2);
+    group.add(screen);
+  }
+
+  for (const dx of [-1.0, 1.0]) {
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6),
+      new THREE.MeshBasicMaterial({ color: '#fff4d0', toneMapped: false }));
+    lamp.position.set(dx, 1.85, 9.2);
+    group.add(lamp);
+  }
+
+  // diesel classes carry side grilles instead of a pantograph
+  if (spec.diesel) {
+    for (const side of [-1, 1]) {
+      const grille = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, 7.2), dark);
+      grille.position.set(side * 1.52, 3.2, -2.4);
+      group.add(grille);
+    }
+    const exhaust = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 2.0), dark);
+    exhaust.position.set(0, 4.85, 0.4);
+    group.add(exhaust);
+  } else {
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.6), dark);
+    base.position.set(0, 4.85, -4.6);
+    group.add(base);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.1), dark);
+    arm.position.set(0, 5.5, -4.1);
+    arm.rotation.x = 0.5;
+    group.add(arm);
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.3), dark);
+    shoe.position.set(0, 6.15, -3.6);
+    group.add(shoe);
+  }
+
+  for (const dz of [-12, -6, 3, 7]) {
+    const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.7, 3.0), dark);
+    bogie.position.set(0, 0.85, dz);
+    group.add(bogie);
+  }
+
+  void isPlayer;
+  return { group, length: 20 };
 }
 
 function instanced(geo, material, count) {
@@ -490,19 +596,25 @@ function put(mesh, i, x, y, z, sx = 1, sy = 1, sz = 1, yaw = 0) {
  * of coaches with end walls, vestibules and roof ribs between them.
  */
 function buildTrain(scene, city, train, isPlayer = false) {
+  const style = train.stock || (train.kind === 'express' ? 'lhb' : 'emu');
+  const livery = stockMaterials(city, style);
   const kind = train.kind === 'express' ? 'express' : 'local';
-  const livery = stockMaterials(city, kind);
   const group = new THREE.Group();
   group.name = `train:${train.id}`;
 
   const cars = train.coaches;
   const len = train.coachLen;
-  const locoLen = train.locoLen || 0;
+  const hasLoco = Boolean(train.loco);
+  // the group origin is the nose of the train: the loco's own front sits on it
+  const locoLen = hasLoco ? 18.2 : 0;
+  const locoSpec = hasLoco ? (LOCOS[train.loco] || LOCOS.WAP4) : null;
+  void locoSpec;
   const bodyH = kind === 'express' ? 3.0 : 2.9;
   const bodyY = 2.75;
 
   // ---- coaches: instanced, one draw call per part --------------------
   const bodyGeo = new THREE.BoxGeometry(2.9, bodyH, len - 0.7);
+  const ribGeo = new THREE.BoxGeometry(2.94, bodyH - 0.6, 0.14);
   // a shallow crown, not a half-tube: radius matches the coach half-width and
   // the profile is squashed so only a low rim shows above the body
   const roofGeo = new THREE.CylinderGeometry(1.45, 1.45, len - 0.9, 14, 1, true, -Math.PI * 0.5, Math.PI);
@@ -518,6 +630,7 @@ function buildTrain(scene, city, train, isPlayer = false) {
 
   const bodies = instanced(bodyGeo, livery.body, cars);
   const roofs = instanced(roofGeo, livery.roof, cars);
+  const ribs = style === 'icf' ? instanced(ribGeo, livery.roof, cars * 5) : null;
   const bands = instanced(bandGeo, livery.glass, cars);
   const stripes = instanced(stripeGeo, livery.stripe, cars);
   const skirts = instanced(skirtGeo, livery.trim, cars);
@@ -533,7 +646,12 @@ function buildTrain(scene, city, train, isPlayer = false) {
   for (let i = 0; i < cars; i++) {
     const z = -(locoLen + len * i + len / 2);
     put(bodies, i, 0, bodyY, z);
-    put(roofs, i, 0, bodyY + bodyH / 2 - 0.28, z, 1, 0.34, 1);
+    put(roofs, i, 0, style === 'icf' ? bodyY + bodyH / 2 - 0.16 : bodyY + bodyH / 2 - 0.28, z, 1, style === 'icf' ? 0.16 : 0.34, 1);
+    if (ribs) {
+      for (let k = 0; k < 5; k++) {
+        put(ribs, i * 5 + k, 0, bodyY, z - len * 0.36 + (k * len * 0.72) / 4);
+      }
+    }
     put(bands, i, 0, bodyY + 0.52, z);
     put(stripes, i, 0, bodyY - 0.72, z);
     put(skirts, i, 0, 1.55, z);
@@ -559,60 +677,18 @@ function buildTrain(scene, city, train, isPlayer = false) {
       put(ends, e++, 0, 2.5, z + len / 2 - 0.2);
     }
   }
-  for (const mesh of [bodies, roofs, bands, stripes, skirts, doors, panes, bogies, ends]) {
+  for (const mesh of [bodies, roofs, ribs, bands, stripes, skirts, doors, panes, bogies, ends]) {
+    if (!mesh) continue;
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.count > 0) group.add(mesh);
   }
 
-  // ---- locomotive (long-distance workings only) ----------------------
-  if (locoLen) {
-    const loco = new THREE.Group();
-    loco.position.set(0, 0, -locoLen / 2);
-    const shell = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.2, locoLen - 3.2), livery.locoBody);
-    shell.position.set(0, 2.9, -1.2);
-    loco.add(shell);
-
-    const locoRoof = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.45, locoLen - 3.6, 14, 1, true, -Math.PI * 0.5, Math.PI), livery.locoRoof);
-    locoRoof.geometry.rotateZ(Math.PI / 2);
-    locoRoof.geometry.rotateY(Math.PI / 2);
-    locoRoof.scale.set(1, 0.34, 1);
-    locoRoof.position.set(0, 4.2, -1.2);
-    loco.add(locoRoof);
-
-    const band = new THREE.Mesh(new THREE.BoxGeometry(2.94, 0.7, locoLen - 6), livery.locoStripe);
-    band.position.set(0, 3.7, -1.2);
-    loco.add(band);
-
-    if (!isPlayer) {
-      // a tapered nose facing the direction of travel
-      const nose = new THREE.Mesh(new THREE.BoxGeometry(2.85, 2.5, 2.4), livery.locoNose);
-      nose.position.set(0, 2.55, 6.0);
-      nose.scale.set(1, 1, 1);
-      loco.add(nose);
-      const screen = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.95, 0.16), livery.glass);
-      screen.position.set(0, 3.35, 7.2);
-      loco.add(screen);
-      const lampGeo = new THREE.SphereGeometry(0.17, 8, 6);
-      for (const dx of [-0.95, 0.95]) {
-        const lamp = new THREE.Mesh(lampGeo, livery.lamp);
-        lamp.position.set(dx, 1.9, 7.3);
-        loco.add(lamp);
-      }
-    }
-
-    // pantograph, folded low over the roof
-    const armMat = livery.trim;
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.6), armMat);
-    base.position.set(0, 4.72, -4.2);
-    loco.add(base);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.12), armMat);
-    arm.position.set(0, 5.4, -3.7);
-    arm.rotation.x = 0.5;
-    loco.add(arm);
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.09, 0.3), armMat);
-    shoe.position.set(0, 6.1, -3.2);
-    loco.add(shoe);
-
+  // ---- locomotive --------------------------------------------------
+  if (hasLoco) {
+    const { group: loco } = buildLoco(city, train.loco, isPlayer);
+    loco.position.set(0, 0, -9.0);
+    // a locomotive is a lone machine: drop the express paintwork from the first
+    // coach so the two read as a loco and a rake, not one long blue tube
     group.add(loco);
   } else if (!isPlayer) {
     // the front of a suburban rake: a flat cab end with a screen
@@ -632,12 +708,16 @@ function buildTrain(scene, city, train, isPlayer = false) {
 
   if (isPlayer) {
     // a low nose beyond the windscreen, so you can see the front of your train
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(2.86, 0.7, 1.6), livery.locoBody);
-    hood.position.set(0, -0.35, 4.6);
+    const hoodMat = hasLoco && LOCOS[train.loco]
+      ? mat(`${city.id}-loco-${train.loco}`, LOCOS[train.loco].body)
+      : livery.body;
+    // the bonnet sits below the windscreen, so the cab has a nose to look over
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.62, 2.2), hoodMat);
+    hood.position.set(0, 2.28, 2.3);
     group.add(hood);
     for (const dx of [-0.9, 0.9]) {
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), livery.lamp);
-      lamp.position.set(dx, -0.5, 5.3);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), livery.lamp);
+      lamp.position.set(dx, 2.16, 3.42);
       group.add(lamp);
     }
   }
@@ -646,44 +726,94 @@ function buildTrain(scene, city, train, isPlayer = false) {
   return group;
 }
 
-/** The driver's cab shell, built around an eye at the train group's origin. */
-function buildCab(trainGroup) {
+/**
+ * The driver's cab shell. Authored directly in the train group's local frame,
+ * whose origin is the nose of the train on the railhead, so the eye lands at
+ * CAB_EYE and everything here is measured from the rail.
+ */
+export const CAB_EYE = { x: 0.42, y: 3.45, z: -1.35 };
+
+/**
+ * The driver's cab: an outer shell in the locomotive's paint, and a dark
+ * lining inside it. Authored in the train group's local frame, whose origin is
+ * the nose of the train on the railhead.
+ */
+function buildCab(trainGroup, paint) {
   const shell = new THREE.Group();
   shell.name = 'cab';
-  shell.position.y = 1.15;
-  const trim = new THREE.MeshLambertMaterial({ color: '#333d3a' });
+
+  const outer = paint || new THREE.MeshLambertMaterial({ color: '#2f3936' });
+  const panel = new THREE.MeshLambertMaterial({ color: '#525c56', emissive: '#1d2422' });
+  const frame = new THREE.MeshLambertMaterial({ color: '#333c39', emissive: '#121816' });
+  const desk = new THREE.MeshLambertMaterial({ color: '#6d756e', emissive: '#232a27' });
   const glass = new THREE.MeshLambertMaterial({
-    color: '#a8c8d8', transparent: true, opacity: 0.06, depthWrite: false,
+    color: '#b9d6e2', transparent: true, opacity: 0.07, depthWrite: false,
   });
 
-  // Only the frame: roof, A-pillars and the windscreen. The dashboard itself is
-  // drawn by the HUD, which is where it can actually carry instruments.
-  const lining = new THREE.MeshLambertMaterial({ color: '#20282a' });
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.94, 0.1, 3.4), lining);
-  roof.position.set(0, 4.75, 3.2);
-  shell.add(roof);
+  const add = (geo, material, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.position.set(x, y, z);
+    mesh.rotation.set(rx, ry, rz);
+    shell.add(mesh);
+    return mesh;
+  };
 
+  const screenZ = 1.0;
+  const sillY = 2.42;
+  const headY = 4.18;
+
+  // ---- outer shell (seen from outside, in loco paint) -----------------
+  add(new THREE.BoxGeometry(3.02, 0.22, 3.5), outer, 0, headY + 0.24, -0.25); // roof
+  add(new THREE.BoxGeometry(3.02, 0.55, 2.4), outer, 0, headY + 0.1, -0.4);    // roof over the cab
+  add(new THREE.BoxGeometry(3.0, 0.85, 0.5), outer, 0, sillY - 0.55, screenZ); // nose below the screen
+  add(new THREE.BoxGeometry(3.0, 0.6, 0.5), outer, 0, headY + 0.14, screenZ);  // header
   for (const side of [-1, 1]) {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.5, 0.09), trim);
-    pillar.position.set(side * 1.52, 3.4, 2.0);
-    shell.add(pillar);
+    add(new THREE.BoxGeometry(0.12, 3.4, 3.2), outer, side * 1.5, 2.9, -0.3);  // sides
+  }
+  add(new THREE.BoxGeometry(2.9, 0.14, 3.4), panel, 0, 1.72, -0.2);           // floor
 
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 1.8), trim);
-    rail.position.set(side * 1.3, 2.5, 3.0);
-    shell.add(rail);
+  // ---- interior lining -------------------------------------------------
+  add(new THREE.BoxGeometry(2.86, 0.1, 3.1), panel, 0, headY + 0.12, -0.25);
+  for (const side of [-1, 1]) {
+    // the lining covers the whole wall, so the loco paint never shows inside
+    add(new THREE.BoxGeometry(0.07, 2.7, 3.2), panel, side * 1.43, 2.98, -0.3);
   }
 
-  const windscreen = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 2.4), glass);
-  windscreen.position.set(0, 3.1, 4.4);
-  shell.add(windscreen);
+  // ---- windscreen ------------------------------------------------------
+  add(new THREE.BoxGeometry(2.96, 0.18, 0.28), frame, 0, sillY - 0.09, screenZ);
+  add(new THREE.BoxGeometry(2.96, 0.18, 0.28), frame, 0, headY + 0.09, screenZ);
+  for (const side of [-1, 1]) {
+    add(new THREE.BoxGeometry(0.16, headY - sillY + 0.36, 0.26), frame,
+      side * 1.44, (headY + sillY) / 2, screenZ);
+  }
+  add(new THREE.PlaneGeometry(2.76, headY - sillY), glass, 0, (headY + sillY) / 2, screenZ + 0.03);
+  add(new THREE.PlaneGeometry(2.5, 0.4),
+    new THREE.MeshBasicMaterial({ color: '#dfeef4', transparent: true, opacity: 0.1, depthWrite: false }),
+    0, headY - 0.22, screenZ + 0.05);
+  add(new THREE.BoxGeometry(0.05, 1.05, 0.05), frame, -0.5, 3.4, screenZ + 0.08, 0, 0, 0.5);
+  // sun visor, flat against the header instead of slicing across the view
+  add(new THREE.BoxGeometry(2.5, 0.3, 0.12), frame, 0, headY - 0.12, screenZ - 0.05);
 
-  // a soft band of reflected sky along the top of the glass
-  const glare = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.8, 0.7),
-    new THREE.MeshBasicMaterial({ color: '#dce9ee', transparent: true, opacity: 0.1, depthWrite: false }),
-  );
-  glare.position.set(0, 3.75, 4.38);
-  shell.add(glare);
+  // ---- dash and console ------------------------------------------------
+  add(new THREE.BoxGeometry(2.86, 0.4, 1.4), desk, 0, 2.72, 0.9);
+  add(new THREE.BoxGeometry(2.82, 0.5, 0.3), panel, 0, 2.36, 1.16);
+  add(new THREE.BoxGeometry(2.86, 0.7, 1.5), panel, 0, 2.1, 0.6);
+  for (const [x, h] of [[-0.66, 0.3], [0.7, 0.26]]) {
+    add(new THREE.BoxGeometry(0.09, h, 0.09), frame, x, 2.92 + h / 2, 0.72, -0.24, 0, 0);
+    add(new THREE.SphereGeometry(0.08, 8, 6), frame, x, 2.92 + h, 0.68);
+  }
+  add(new THREE.BoxGeometry(0.8, 0.22, 0.18), panel, -0.05, 2.96, 0.6, -0.3, 0, 0);
+
+  // ---- ceiling, side glass, rear bulkhead ------------------------------
+  add(new THREE.BoxGeometry(0.28, 0.05, 0.4),
+    new THREE.MeshBasicMaterial({ color: '#f6efd6', toneMapped: false }), 0, headY + 0.05, -0.7);
+  for (const side of [-1, 1]) {
+    add(new THREE.PlaneGeometry(2.4, 0.62), glass, side * 1.29, 3.42, -0.25, 0, Math.PI / 2, 0);
+    add(new THREE.BoxGeometry(0.05, 0.8, 0.05), frame, side * 1.22, 3.42, 0.9);
+    add(new THREE.BoxGeometry(0.09, 1.5, 0.4), outer, side * 1.44, 3.4, -1.5);
+  }
+  add(new THREE.BoxGeometry(2.86, 2.7, 0.12), panel, 0, 3.0, -1.68);
+  add(new THREE.BoxGeometry(0.86, 1.9, 0.05), frame, 0.44, 2.75, -1.62);
 
   trainGroup.add(shell);
   return shell;
@@ -716,8 +846,23 @@ export function buildWorld3D(world) {
   for (const train of world.trains) {
     trainGroups.set(train.id, buildTrain(scene, world.city, train, train.id === world.playerId));
   }
-  const cab = buildCab(trainGroups.get(world.playerId));
+  const playerTrain = world.trains.find((t) => t.id === world.playerId);
+  const paint = playerTrain && playerTrain.loco && LOCOS[playerTrain.loco]
+    ? mat(`${world.city.id}-loco-${playerTrain.loco}`, LOCOS[playerTrain.loco].body)
+    : stockMaterials(world.city, playerTrain?.stock || 'emu').body;
+  const cab = buildCab(trainGroups.get(world.playerId), paint);
   const signals = buildSignals(scene, world);
+
+  // everything but the trains is static: freeze its matrices so the renderer
+  // does not rebuild ~1400 of them every frame
+  const moving = new Set();
+  for (const group of trainGroups.values()) {
+    group.traverse((o) => moving.add(o));
+  }
+  scene.traverse((o) => {
+    if (!moving.has(o)) o.matrixAutoUpdate = false;
+  });
+  scene.updateMatrixWorld(true);
 
   return { scene, trainGroups, cab, signals, city: world.city };
 }
@@ -752,40 +897,66 @@ export function updateWorld3D(view, world) {
 }
 
 /** Where the camera sits this frame, and what it is looking at. */
-export function cameraPose(world, { mode = 'cab', orbit = 0.6, height = 26, distance = 46 } = {}) {
+export function cameraPose(world, { mode = 'cab', orbit = 0.6, height = 22, distance = 78 } = {}) {
   const train = playerTrain(world);
   const path = world.paths[train.pathId];
   const head = sample(path, train.s);
   const forward = train.dir > 0 ? head.angle : head.angle + Math.PI;
   const fx = Math.cos(forward);
   const fz = Math.sin(forward);
+  // right-hand vector on the ground plane
+  const rx = fz;
+  const rz = -fx;
 
   if (mode === 'cab') {
+    // seated in the cab, just behind the nose, eye level with the windscreen
     return {
-      position: new THREE.Vector3(head.x, 4.2, head.y),
-      target: new THREE.Vector3(head.x + fx * 120, 3.5, head.y + fz * 120),
-      fov: 74,
+      position: new THREE.Vector3(
+        head.x + fx * CAB_EYE.z + rx * CAB_EYE.x,
+        CAB_EYE.y,
+        head.y + fz * CAB_EYE.z + rz * CAB_EYE.x,
+      ),
+      target: new THREE.Vector3(head.x + fx * 160, 2.75, head.y + fz * 160),
+      fov: 66,
     };
   }
 
   if (mode === 'chase') {
+    // a drone over the shoulder of the loco: high enough to clear the coaches
+    // (they trail 300 m back) and pitched down the line so you can drive on it
     const back = 30;
+    const side = 11;
     return {
-      position: new THREE.Vector3(head.x - fx * back, 9.0, head.y - fz * back),
-      target: new THREE.Vector3(head.x + fx * 26, 3.4, head.y + fz * 26),
-      fov: 62,
+      position: new THREE.Vector3(
+        head.x - fx * back + rx * side,
+        16,
+        head.y - fz * back + rz * side,
+      ),
+      target: new THREE.Vector3(head.x + fx * 55, 2.5, head.y + fz * 55),
+      fov: 58,
     };
   }
 
-  // lineside / orbit: circle the train so you can watch it go past
+  if (mode === 'overhead') {
+    return {
+      position: new THREE.Vector3(head.x + rx * 6, 120, head.y + rz * 6 - 8),
+      target: new THREE.Vector3(head.x, 0, head.y - 56),
+      fov: 52,
+    };
+  }
+
+  // lineside / orbit: stand off the track and watch the whole rake go past.
+  // the rake is 200-400 m long, so the eye is pulled back to frame it all
+  const midfield = Math.min(train.length * 0.42, 150);
+  const stand = distance + train.length * 0.14;
   return {
     position: new THREE.Vector3(
-      head.x + Math.cos(orbit) * distance,
-      height,
-      head.y + Math.sin(orbit) * distance,
+      head.x + Math.cos(orbit) * stand,
+      height + train.length * 0.02,
+      head.y + Math.sin(orbit) * stand,
     ),
-    target: new THREE.Vector3(head.x, 3.0, head.y),
-    fov: 52,
+    target: new THREE.Vector3(head.x - fx * midfield, 3.0, head.y - fz * midfield),
+    fov: 44,
   };
 }
 

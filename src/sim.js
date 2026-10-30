@@ -22,6 +22,11 @@ export const TUNING = Object.freeze({
   missedPenalty: 30,
   spadPenalty: 60,
   collisionPenalty: 120,
+  // the green zone at a platform, in metres either side of the stop board
+  greenZone: 18,
+  perfectZone: 5,
+  notchCount: 8,          // power and brake notches on the lever
+  overspeedGrace: 2.2,    // seconds over the limit before it is penalised
 });
 
 const clampIdx = (i, n) => (i < 0 ? 0 : i >= n ? n - 1 : i);
@@ -161,6 +166,20 @@ function stationBlocked(world, train, station) {
     && Math.abs(other.s - station.s) < other.length * 0.5 + 24);
 }
 
+/**
+ * Record a penalty or bonus the way Indian Train Simulator's message system
+ * does: every event carries a category (Speed, Station, Signal, Doors) and an
+ * amount, and the HUD shows the last few.
+ */
+export function message(world, category, text, amount = 0) {
+  world.messages.push({ t: world.time, category, text, amount });
+  if (world.messages.length > 40) world.messages.shift();
+  world.events.push({ text, tone: amount < 0 ? 'bad' : amount > 0 ? 'good' : 'info' });
+  world.score = Math.max(0, Math.round(world.score + amount));
+  if (amount < 0) world.penalties.push({ t: world.time, category, text, amount });
+  return amount;
+}
+
 function arrive(world, train, station) {
   const offset = Math.abs(train.s - station.s);
   train.s = station.s;
@@ -173,10 +192,22 @@ function arrive(world, train, station) {
 
   const isPlayer = world.playerId === train.id;
   if (isPlayer) {
-    const bonus = Math.round(Math.max(0, TUNING.accuracyPoints - offset * 3));
-    world.score += bonus;
+    // the green zone: a perfect stop is on the board, a good one is alongside
+    let bonus;
+    let grade;
+    if (offset <= TUNING.perfectZone) {
+      bonus = 120;
+      grade = 'PERFECT STOP';
+    } else if (offset <= TUNING.greenZone) {
+      bonus = 70;
+      grade = 'GOOD STOP';
+    } else {
+      bonus = 25;
+      grade = 'OFF THE BOARD';
+    }
     train.lastStopScore = bonus;
-    world.events.push({ text: `${station.name} — stopped ${Math.round(offset)}m from the board (+${bonus})`, tone: 'good' });
+    train.lastGrade = grade;
+    message(world, 'Station', `${station.name} — ${grade.toLowerCase()} (${Math.round(offset)} m from the board) +${bonus}`, bonus);
   } else {
     train.lastStopScore = 0;
   }
@@ -209,8 +240,8 @@ function missStop(world, train, station) {
   advance(world, train);
   const isPlayer = world.playerId === train.id;
   if (isPlayer) {
-    world.score = Math.max(0, world.score - TUNING.missedPenalty);
-    world.events.push({ text: `MISSED ${station.name.toUpperCase()} −${TUNING.missedPenalty}`, tone: 'bad' });
+    train.lastGrade = 'MISSED';
+    message(world, 'Station', `MISSED ${station.name.toUpperCase()} −${TUNING.missedPenalty}`, -TUNING.missedPenalty);
   }
 }
 
@@ -360,8 +391,15 @@ export function drivePlayer(world, train, controls) {
     train.braking = 1;
     return;
   }
-  train.throttle = controls.throttle ? 1 : 0;
-  train.braking = controls.hazard ? TUNING.emergencyMult : controls.brake ? 1 : 0;
+
+  // levers are notched like the real thing: 0-8 power, 0-8 brake, one handle
+  // position at a time, and an emergency tap that overrides both
+  const notches = TUNING.notchCount;
+  train.power = clamp(controls.power ?? (controls.throttle ? notches : 0), 0, notches);
+  train.brakeNotch = clamp(controls.brakeNotch ?? (controls.brake ? notches : 0), 0, notches);
+
+  train.throttle = train.power / notches;
+  train.braking = controls.hazard ? TUNING.emergencyMult : train.brakeNotch / notches;
 }
 
 export function toggleDoors(world, train) {
@@ -402,6 +440,50 @@ export function playerTrain(world) {
 }
 
 /** Advance the whole network by dt seconds. */
+function watchPlayer(world, train, dt) {
+  const limit = speedLimitFor(world, train);
+
+  // Speed: grace period, then a penalty every few seconds while over
+  if (train.v > limit * 1.06 + 1.0) {
+    train.overspeedT = (train.overspeedT || 0) + dt;
+    train.overspeedTick = (train.overspeedTick || 0) + dt;
+    if (train.overspeedT > TUNING.overspeedGrace && train.overspeedTick > 4) {
+      train.overspeedTick = 0;
+      message(world, 'Speed', `OVERSPEED — ${Math.round(train.v * KMH)} in a ${Math.round(limit * KMH)} limit`, -15);
+    }
+  } else {
+    train.overspeedT = 0;
+    train.overspeedTick = 0;
+  }
+
+  // Signal: passing a red board is a SPAD
+  const sig = nextSignal(world, train);
+  if (sig && sig.red && sig.d < 0 && sig.d > -30 && !train.spadFor) {
+    train.spadFor = `${sig.s}`;
+    message(world, 'Signal', `SIGNAL PASSED AT DANGER −${TUNING.spadPenalty}`, -TUNING.spadPenalty);
+    train.v = Math.min(train.v, 0);
+    train.stun = 2.5;
+  }
+  if (!sig || !sig.red) train.spadFor = null;
+
+  // Doors opened away from a platform
+  if (train.state === 'run' && train.doors > 0.1 && !train.doorWarned) {
+    train.doorWarned = true;
+    message(world, 'Doors', 'DOORS OPEN WHILE RUNNING', -20);
+  }
+  if (train.doors < 0.05) train.doorWarned = false;
+
+  // End of the run: back at the origin, with the route behind us
+  if (!world.finished && train.dir === 1 && train.idx === 1 && train.s > 0
+    && train.route.indexOf(train.route[0]) !== train.idx
+    && world.time > 120) {
+    const first = train.route[0];
+    if (train.s > first.s + 200) {
+      world.finished = true;
+    }
+  }
+}
+
 export function stepWorld(world, dt, controls = {}) {
   dt = Math.min(dt, 0.05);
   world.time += dt;
@@ -437,6 +519,11 @@ export function stepWorld(world, dt, controls = {}) {
   }
 
   // hard collisions
+  if (world.playerId) {
+    const p = playerTrain(world);
+    if (p) watchPlayer(world, p, dt);
+  }
+
   const pair = collisionPair(world);
   const playerInvolved = pair && (pair[0] === player || pair[1] === player);
   if (playerInvolved && pair[0].stun <= 0 && pair[1].stun <= 0) {
@@ -470,12 +557,14 @@ export function stepWorld(world, dt, controls = {}) {
 /** How far along the line a train is, 0..1 — handy for the map and HUD. */
 /** Advisory limit for the stretch ahead: junctions and platforms are slower. */
 export function speedLimitFor(world, train) {
+  // the line limit comes from the stock itself; the approach is a *target*,
+  // enforced with a little tolerance rather than an instant penalty
+  const base = train.vmax;
   const target = train.route[train.idx];
-  const base = train.kind === 'express' ? 26 : train.kind === 'shuttle' ? 16 : 21;
   if (!target) return base;
   const d = Math.abs(stationDistance(train, target));
-  if (d < 220) return train.kind === 'express' ? 11 : 10;
-  if (d < 620) return Math.min(base, 16);
+  if (d < 140) return Math.min(base, 12);
+  if (d < 520) return Math.min(base, base * 0.72);
   return base;
 }
 

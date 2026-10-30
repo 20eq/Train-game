@@ -51,14 +51,45 @@ test('the title card offers a different local for every city', () => {
   }
 });
 
-test('choosing a city starts that line', () => {
+test('a city opens its Drive menu, and a service starts the run', () => {
   const card = env.elements.get('cityCards').children.find((c) => c.dataset.city === 'kolkata');
   assert.ok(card, 'Kolkata should be on the title card');
   card.emit('click');
+
+  const panel = env.elements.get('servicePanel');
+  assert.equal(panel.classList.contains('hidden'), false, 'the Drive menu should open');
+  const list = panel.children[0].children.find((c) => c.className === 'cities');
+  const ids = list.children.map((c) => c.dataset.service);
+  assert.equal(panel.children[0].className, 'card wide', 'the menu sits in its own card');
+  assert.deepEqual(ids, ['local', 'passenger', 'express'], 'local, passenger and express on every line');
+
+  // run the local first
+  list.children[0].emit('click');
   assert.equal(app.world.city.id, 'kolkata');
+  assert.equal(app.world.trains[0].stock, 'emu', 'the local is an EMU');
+  assert.equal(app.world.trains[0].loco, null);
   assert.equal(app.ui.paused, false);
   assert.equal(env.elements.get('cityName').textContent, 'Kolkata');
   assert.ok(env.elements.get('hud').classList.contains('hidden') === false);
+  assert.match(env.elements.get('serviceName').textContent, new RegExp(app.world.service.name));
+});
+
+test('the Drive menu offers three different machines to drive', () => {
+  app.backToTitle();
+  env.elements.get('cityCards').children[3].emit('click');
+  const list = env.elements.get('servicePanel').children[0].children.find((c) => c.className === 'cities');
+
+  const seen = [];
+  for (const card of list.children) {
+    card.emit('click');
+    const train = app.world.trains[0];
+    seen.push({ id: card.dataset.service, stock: train.stock, loco: train.loco, cars: train.coaches });
+  }
+
+  assert.deepEqual(seen.map((x) => x.stock), ['emu', 'icf', 'lhb']);
+  assert.deepEqual(seen.map((x) => x.loco), [null, 'WAP4', 'WAP7']);
+  assert.ok(seen[2].cars > seen[1].cars, 'the express is the longest rake');
+  assert.ok(seen[0].cars >= 8, 'a suburban rake is at least eight cars');
 });
 
 test('frames advance the timetable and draw every time', () => {
@@ -69,21 +100,28 @@ test('frames advance the timetable and draw every time', () => {
   assert.ok(rendered.frames > frames, 'each frame should render');
 });
 
-test('the throttle reaches the player train', () => {
+test('the power and brake notches reach the player train', () => {
   const train = app.world.trains.find((t) => t.id === app.world.playerId);
   if (train.state === 'dwell') train.dwell = 0.3;
 
   env.press('KeyW');
-  assert.equal(app.controls.throttle, true);
-  step(200);
+  env.press('KeyW');
+  env.press('KeyW');
+  assert.equal(app.controls.power, 3, 'each press is one notch');
+  assert.equal(app.controls.brakeNotch, 0);
+  step(600);
   assert.ok(train.v > 1, `the train should roll, v=${train.v} state=${train.state}`);
-  env.release('KeyW');
-  assert.equal(app.controls.throttle, false);
 
-  env.press('KeyS');
-  step(260);
-  assert.equal(train.v, 0, 'the brake should bring it to a stand');
-  env.release('KeyS');
+  env.press('KeyX');
+  assert.equal(app.controls.power, 0, 'X releases the lever');
+
+  for (let i = 0; i < 8; i++) env.press('KeyS');
+  assert.equal(app.controls.brakeNotch, 8);
+  assert.equal(app.controls.power, 0, 'the brake takes the power off');
+  step(300);
+  assert.equal(train.v, 0, 'full brake should bring it to a stand');
+  env.press('KeyX');
+  assert.equal(app.controls.brakeNotch, 0);
 });
 
 test('C cycles the camera and the HUD says which one', () => {
@@ -108,6 +146,7 @@ test('the HUD reports the next stop and the speed limit', () => {
 });
 
 test('Tab hands over to another train in the same world', () => {
+  app.startCity('mumbai', 'local');
   const first = app.world.playerId;
   env.press('Tab');
   assert.notEqual(app.world.playerId, first);
@@ -167,25 +206,36 @@ test('the stylesheet is balanced and the page has no leftover ids', async () => 
 });
 
 test('the picker survives a browser without WebGL', () => {
+  app.startCity('mumbai', 'express');
   const broken = bootApp({
     createRenderer: () => { throw new Error('WebGL unavailable'); },
     width: 1280, height: 720,
   });
   assert.ok(broken.rendererError, 'the failure should be reported, not thrown');
   assert.equal(broken.world.city.id, 'mumbai', 'a city still builds');
+
+  // this boot owns the menu now: it must list every city and be usable
   const cards = env.elements.get('cityCards');
   assert.equal(cards.children.length, 4, 'and the menu is still there to choose from');
   cards.children[2].emit('click');
+  const list = env.elements.get('servicePanel').children[0].children.find((c) => c.className === 'cities');
+  list.children[2].emit('click');
   assert.equal(broken.world.city.id, 'kolkata');
+  assert.equal(broken.world.trains[0].stock, 'lhb');
   broken.tick(1000);
 });
 
-test('number keys pick a city from the menu', () => {
-  app.backToTitle();
+test('number keys pick a city, then a service', () => {
+  // booted last, so this instance owns the keyboard
+  const fresh = bootApp({
+    createRenderer: () => ({ render() {}, setSize() {}, setPixelRatio() {} }),
+    width: 1280, height: 720,
+  });
   env.press('Digit2');
-  assert.equal(app.world.city.id, 'delhi');
-  app.backToTitle();
-  env.press('Digit4');
-  assert.equal(app.world.city.id, 'chennai');
-  app.startCity('mumbai');
+  const panel = env.elements.get('servicePanel');
+  assert.equal(panel.classList.contains('hidden'), false, 'a city key opens its Drive menu');
+  env.press('Digit3');
+  assert.equal(fresh.world.city.id, 'delhi');
+  assert.equal(fresh.world.trains[0].stock, 'lhb', 'key 3 is the express');
+  fresh.stop();
 });

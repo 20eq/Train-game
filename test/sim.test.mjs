@@ -56,9 +56,9 @@ test('project() snaps a station onto the rails', () => {
 
 test('the world has a trunk and a branch with a fleet on each', () => {
   const world = createWorld();
-  assert.deepEqual(Object.keys(world.paths).sort(), ['branch', 'main']);
+  assert.equal(Object.keys(world.paths).length, 3);
   assert.ok(world.stations.length >= 18);
-  assert.equal(world.trains.length, 6);
+  assert.equal(world.trains.length, 7);
 
   for (const train of world.trains) {
     assert.ok(train.route.length >= 3, `${train.id} needs a route`);
@@ -178,15 +178,18 @@ test('a train that runs through a station is penalised', () => {
 
 test('signals are clear ahead, red behind a standing train', () => {
   const world = createWorld();
-  const [a, b] = world.trains.filter((t) => t.pathId === 'main' && t.dir === 1);
-  b.s = a.s + 120;
+  const line = world.trains.find((t) => t.id === 'player').pathId;
+  const [a, b] = world.trains.filter((t) => t.pathId === line && t.dir === 1);
+  // stand the follower up in a block past the first signal, so a block is held
+  b.s = 2050;
   b.v = 0;
   b.state = 'dwell';
+  a.s = 1500;
   computeSignals(world);
 
   const sig = nextSignal(world, a);
   assert.ok(sig, 'the leader should see a signal');
-  const anyRed = world.signals.main.plus.some((s) => s.red);
+  const anyRed = (world.signals[line]?.plus || []).some((s) => s.red);
   assert.ok(anyRed, 'a block holding a train must show red');
 });
 
@@ -206,7 +209,8 @@ test('AI traffic never rear-ends itself and never deadlocks', () => {
 
 test('a gap is only reported for a train that is actually in the way', () => {
   const world = createWorld();
-  const [lead, follow] = world.trains.filter((t) => t.pathId === 'main' && t.dir === 1);
+  const line = world.trains.find((t) => t.id === 'player').pathId;
+  const [lead, follow] = world.trains.filter((t) => t.pathId === line && t.dir === 1);
   // keep the rest of the fleet out of the measurement
   world.trains = [lead, follow];
   follow.s = lead.s - 500;
@@ -238,12 +242,12 @@ test('speed limits drop for the approach to a station', () => {
 
 test('taking control hands the previous train to the autopilot', () => {
   const world = createWorld();
-  const next = world.trains.find((t) => t.id === 'loc2');
-  setPlayer(world, 'loc2');
-  assert.equal(world.playerId, 'loc2');
+  const next = world.trains.find((t) => t.ai);
+  setPlayer(world, next.id);
+  assert.equal(world.playerId, next.id);
   assert.equal(next.ai, false);
   for (const other of world.trains) {
-    if (other.id !== 'loc2') assert.equal(other.ai, true, `${other.id} should be on autopilot`);
+    if (other.id !== next.id) assert.equal(other.ai, true, `${other.id} should be on autopilot`);
   }
 });
 
@@ -252,6 +256,8 @@ test('a train held at a red signal does not get its stop skipped by the idle gua
   const train = playerTrain(world);
   train.state = 'run';
   train.dwell = 0;
+  // pick a stop with track behind it, so the train can be 300 m short of it
+  train.idx = Math.min(2, train.route.length - 1);
   const stop = train.route[train.idx];
   train.s = stop.s - 300;
   train.v = 0;

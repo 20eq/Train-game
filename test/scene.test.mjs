@@ -40,7 +40,7 @@ test('the 3D scene builds for every city', () => {
     const view = buildWorld3D(world);
 
     assert.ok(view.scene.isScene, 'expected a three.js scene');
-    assert.equal(view.trainGroups.size, 6, 'one group per train');
+    assert.equal(view.trainGroups.size, world.trains.length, 'one group per train');
     assert.ok(view.cab, 'the player needs a cab shell');
     assert.ok(view.signals.length > 0, 'signals should be in the world');
 
@@ -86,7 +86,7 @@ test('the cab camera looks down the line from the head of the train', () => {
   const pose = cameraPose(world, { mode: 'cab' });
   const forward = pose.target.clone().sub(pose.position).normalize();
 
-  assert.ok(pose.position.y > 3.5 && pose.position.y < 5.5, `the eye should be cab height, got ${pose.position.y}`);
+  assert.ok(pose.position.y > 2.9 && pose.position.y < 4.2, `the eye should be cab height, got ${pose.position.y}`);
   assert.ok(Math.abs(forward.y) < 0.05, 'the cab camera should look level, not at the sky');
 
   // the cab view must point along the rails
