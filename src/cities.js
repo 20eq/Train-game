@@ -15,7 +15,8 @@
 
 const ROLLING = {
   mumbai: {
-    emu: { body: '#e4e7e9', stripe: '#243b8f', roof: '#a6adb2', door: '#243b8f', end: '#f2c53d', trim: '#39474f' },
+    // the real Mumbai rake: yellow body, violet band under the windows, grey roof
+    emu: { body: '#f0c22c', stripe: '#5a2a86', roof: '#adb2ae', door: '#e6b526', end: '#f0c22c', trim: '#34393b' },
     icf: { body: '#f0e6cf', stripe: '#b8342a', roof: '#7d2a22', door: '#b8342a', end: '#b8342a', trim: '#5c2c26' },
     lhb: { body: '#25407c', stripe: '#eef2f8', roof: '#1b2f5c', door: '#25407c', end: '#25407c', trim: '#93a1b6' },
   },

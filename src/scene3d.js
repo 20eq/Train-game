@@ -652,8 +652,17 @@ function buildTrain(scene, city, train, isPlayer = false) {
         put(ribs, i * 5 + k, 0, bodyY, z - len * 0.36 + (k * len * 0.72) / 4);
       }
     }
-    put(bands, i, 0, bodyY + 0.52, z);
-    put(stripes, i, 0, bodyY - 0.72, z);
+    // the dark window band is what the panes sit on. On an EMU the livery
+    // stripe already carries the band, so it is trimmed back to the glass
+    put(bands, i, 0, bodyY + 0.52, z, 1, style === 'emu' ? 0.8 : 1, 1);
+    // a suburban rake wears its colour as a broad band at window level (the
+    // violet stripe of a Mumbai EMU), so the glass sits inside the band;
+    // carriage stock keeps a thin lining stripe low down instead
+    if (style === 'emu') {
+      put(stripes, i, 0, bodyY + 0.38, z, 1, 5.2, 1);
+    } else {
+      put(stripes, i, 0, bodyY - 0.72, z);
+    }
     put(skirts, i, 0, 1.55, z);
 
     // doors: two per side, at the ends of the saloon
@@ -691,17 +700,30 @@ function buildTrain(scene, city, train, isPlayer = false) {
     // coach so the two read as a loco and a rake, not one long blue tube
     group.add(loco);
   } else if (!isPlayer) {
-    // the front of a suburban rake: a flat cab end with a screen
+    // the front of a suburban rake: a flat cab end with a screen, the band
+    // carried round the nose, a destination board and two marker lamps
     const nose = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.9, 1.2), livery.end);
     nose.position.set(0, 2.75, 0.5);
     group.add(nose);
+
     const screen = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.0, 0.14), livery.glass);
     screen.position.set(0, 3.5, 1.14);
     group.add(screen);
+
+    const band = new THREE.Mesh(new THREE.BoxGeometry(2.94, 0.42, 0.08), livery.stripe);
+    band.position.set(0, 2.63, 1.14);
+    group.add(band);
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(1.85, 0.26, 0.06),
+      new THREE.MeshBasicMaterial({ color: '#eae5d2' }),
+    );
+    board.position.set(0, 4.05, 1.14);
+    group.add(board);
+
     const lampGeo = new THREE.SphereGeometry(0.16, 8, 6);
     for (const dx of [-0.9, 0.9]) {
       const lamp = new THREE.Mesh(lampGeo, livery.lamp);
-      lamp.position.set(dx, 1.7, 1.16);
+      lamp.position.set(dx, 1.62, 1.16);
       group.add(lamp);
     }
   }
@@ -738,7 +760,7 @@ export const CAB_EYE = { x: 0.42, y: 3.45, z: -1.35 };
  * lining inside it. Authored in the train group's local frame, whose origin is
  * the nose of the train on the railhead.
  */
-function buildCab(trainGroup, paint) {
+function buildCab(trainGroup, paint, accent) {
   const shell = new THREE.Group();
   shell.name = 'cab';
 
@@ -763,20 +785,20 @@ function buildCab(trainGroup, paint) {
   const headY = 4.18;
 
   // ---- outer shell (seen from outside, in loco paint) -----------------
-  add(new THREE.BoxGeometry(3.02, 0.22, 3.5), outer, 0, headY + 0.24, -0.25); // roof
-  add(new THREE.BoxGeometry(3.02, 0.55, 2.4), outer, 0, headY + 0.1, -0.4);    // roof over the cab
-  add(new THREE.BoxGeometry(3.0, 0.85, 0.5), outer, 0, sillY - 0.55, screenZ); // nose below the screen
-  add(new THREE.BoxGeometry(3.0, 0.6, 0.5), outer, 0, headY + 0.14, screenZ);  // header
+  add(new THREE.BoxGeometry(3.06, 0.2, 3.5), outer, 0, headY + 0.36, -0.25);   // roof skin
+  add(new THREE.BoxGeometry(3.06, 0.55, 2.4), outer, 0, headY + 0.22, -0.4);    // roof over the cab
+  add(new THREE.BoxGeometry(3.02, 0.85, 0.5), outer, 0, sillY - 0.55, screenZ); // nose below the screen
+  add(new THREE.BoxGeometry(3.02, 0.62, 0.5), outer, 0, headY + 0.22, screenZ);  // header
   for (const side of [-1, 1]) {
-    add(new THREE.BoxGeometry(0.12, 3.4, 3.2), outer, side * 1.5, 2.9, -0.3);  // sides
+    add(new THREE.BoxGeometry(0.08, 3.5, 3.2), outer, side * 1.53, 2.9, -0.3);  // side skin
   }
   add(new THREE.BoxGeometry(2.9, 0.14, 3.4), panel, 0, 1.72, -0.2);           // floor
 
   // ---- interior lining -------------------------------------------------
-  add(new THREE.BoxGeometry(2.86, 0.1, 3.1), panel, 0, headY + 0.12, -0.25);
+  add(new THREE.BoxGeometry(2.86, 0.1, 3.1), panel, 0, headY + 0.02, -0.25);
   for (const side of [-1, 1]) {
-    // the lining covers the whole wall, so the loco paint never shows inside
-    add(new THREE.BoxGeometry(0.07, 2.7, 3.2), panel, side * 1.43, 2.98, -0.3);
+    // the lining covers the whole wall, so the livery never shows inside
+    add(new THREE.BoxGeometry(0.08, 2.9, 3.2), panel, side * 1.4, 2.9, -0.3);
   }
 
   // ---- windscreen ------------------------------------------------------
@@ -798,6 +820,15 @@ function buildCab(trainGroup, paint) {
   add(new THREE.BoxGeometry(2.86, 0.4, 1.4), desk, 0, 2.72, 0.9);
   add(new THREE.BoxGeometry(2.82, 0.5, 0.3), panel, 0, 2.36, 1.16);
   add(new THREE.BoxGeometry(2.86, 0.7, 1.5), panel, 0, 2.1, 0.6);
+
+  // the livery wraps round the cab end, exactly as it does on the rake behind
+  if (accent) {
+    const board = new THREE.MeshBasicMaterial({ color: '#eae5d2' });
+    // under the screen, not across it: the band wraps the cab end at the
+    // same height it runs along the coaches
+    add(new THREE.BoxGeometry(3.0, 0.42, 0.06), accent, 0, 2.16, screenZ + 0.27);
+    add(new THREE.BoxGeometry(1.85, 0.26, 0.05), board, 0, 4.4, screenZ + 0.26);
+  }
   for (const [x, h] of [[-0.66, 0.3], [0.7, 0.26]]) {
     add(new THREE.BoxGeometry(0.09, h, 0.09), frame, x, 2.92 + h / 2, 0.72, -0.24, 0, 0);
     add(new THREE.SphereGeometry(0.08, 8, 6), frame, x, 2.92 + h, 0.68);
@@ -808,7 +839,7 @@ function buildCab(trainGroup, paint) {
   add(new THREE.BoxGeometry(0.28, 0.05, 0.4),
     new THREE.MeshBasicMaterial({ color: '#f6efd6', toneMapped: false }), 0, headY + 0.05, -0.7);
   for (const side of [-1, 1]) {
-    add(new THREE.PlaneGeometry(2.4, 0.62), glass, side * 1.29, 3.42, -0.25, 0, Math.PI / 2, 0);
+    add(new THREE.PlaneGeometry(2.4, 0.62), glass, side * 1.44, 3.42, -0.25, 0, Math.PI / 2, 0);
     add(new THREE.BoxGeometry(0.05, 0.8, 0.05), frame, side * 1.22, 3.42, 0.9);
     add(new THREE.BoxGeometry(0.09, 1.5, 0.4), outer, side * 1.44, 3.4, -1.5);
   }
@@ -847,10 +878,11 @@ export function buildWorld3D(world) {
     trainGroups.set(train.id, buildTrain(scene, world.city, train, train.id === world.playerId));
   }
   const playerTrain = world.trains.find((t) => t.id === world.playerId);
-  const paint = playerTrain && playerTrain.loco && LOCOS[playerTrain.loco]
-    ? mat(`${world.city.id}-loco-${playerTrain.loco}`, LOCOS[playerTrain.loco].body)
-    : stockMaterials(world.city, playerTrain?.stock || 'emu').body;
-  const cab = buildCab(trainGroups.get(world.playerId), paint);
+  const rake = stockMaterials(world.city, playerTrain?.stock || 'emu');
+  const loco = playerTrain && playerTrain.loco ? LOCOS[playerTrain.loco] : null;
+  const paint = loco ? mat(`${world.city.id}-loco-${playerTrain.loco}`, loco.body) : rake.body;
+  const accent = loco ? mat(`${world.city.id}-loco-${playerTrain.loco}-st`, loco.stripe) : rake.stripe;
+  const cab = buildCab(trainGroups.get(world.playerId), paint, accent);
   const signals = buildSignals(scene, world);
 
   // everything but the trains is static: freeze its matrices so the renderer

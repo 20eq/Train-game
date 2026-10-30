@@ -9,7 +9,7 @@ from any static server, offline.
 
 ```bash
 npm start     # http://localhost:5173
-npm test      # 49 node tests: cities, sim, 3D scene, headless app boot
+npm test      # 50 node tests: cities, sim, 3D scene, headless app boot
 python3 -m unittest discover -s test   # 27 tests for auth.py
 ```
 
@@ -17,10 +17,10 @@ python3 -m unittest discover -s test   # 27 tests for auth.py
 | --- | --- |
 | ![The picker](docs/menu.png) | ![Lines](docs/lines-mumbai.png) |
 | *Pick a city* | *Then the line you want to work* |
-| ![Drive menu](docs/services.png) | ![Chennai lineside](docs/lineside-chennai.png) |
-| *Then the trains on that line* | *Chennai — a nine-car local at a halt* |
+| ![Drive menu](docs/services.png) | ![Mumbai EMU](docs/lineside-mumbai-emu.png) |
+| *Then the trains on that line* | *Mumbai — a 12-car local in its yellow and violet* |
 | ![Mumbai cab](docs/cab-mumbai.png) | ![Kolkata chase](docs/chase-kolkata.png) |
-| *Mumbai — Western Line, from the cab* | *Kolkata — chase camera off the shoulder* |
+| *Mumbai — the local's cab, in its own paint* | *Kolkata — chase camera off the shoulder* |
 | ![Mumbai network](docs/network-mumbai.png) | |
 | *Mumbai — Western, Central and Harbour in one corridor* | |
 
@@ -48,8 +48,10 @@ belong to the line you're about to drive.
 | | MRTS | MRTS Local · MRTS Fast Local (EMU only) | — | — |
 
 **Three different machines, not three liveries.** A local is an EMU: flat cab
-end, four doors a side, white body with the city's band, quick away and 20–21
-m/s flat out. A passenger is a WAP-4 and ten cream ICF coaches: ribbed sides,
+end, four doors a side, a broad livery band running at window height, a
+destination board and marker lamps on the nose, quick away and 20–21 m/s flat
+out. Mumbai's rakes wear the real thing — yellow body, violet band, grey roof —
+and each other city keeps its own body and band colour. A passenger is a WAP-4 and ten cream ICF coaches: ribbed sides,
 slow off the mark, stops at every station. An express is a WAP-7 (a WAP-5 in
 Delhi) and 17–20 LHB coaches: sealed navy or maroon stock, 28–29 m/s, principal
 stops only. The MRTS is an EMU-only corridor, so its line offers a stopping

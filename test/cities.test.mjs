@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CITIES, getCity } from '../src/cities.js';
+import { CITIES, getCity, liveryFor } from '../src/cities.js';
 import { createWorld, makeRand } from '../src/world.js';
 import { stepWorld } from '../src/sim.js';
 
@@ -95,6 +95,21 @@ test('each city runs its own rolling stock, with long rakes', () => {
     seen.add(`${express.coaches}:${local.coaches}`);
   }
   assert.ok(seen.size >= 3, 'the cities should not all run identical formations');
+});
+
+test('Mumbai locals wear the real yellow and violet', () => {
+  const mumbai = CITIES.find((c) => c.id === 'mumbai');
+  const emu = liveryFor(mumbai, 'emu');
+  // the Western/Central/Harbour rake: yellow body, violet band, grey roof
+  assert.equal(emu.body.toLowerCase(), '#f0c22c', 'Mumbai EMU body is yellow');
+  assert.equal(emu.stripe.toLowerCase(), '#5a2a86', 'with the violet band');
+  assert.ok(emu.roof && emu.trim, 'and a roof and underframe colour');
+
+  // every other city keeps its own band, so no two locals look alike
+  const bands = new Set(CITIES.map((c) => liveryFor(c, 'emu').stripe.toLowerCase()));
+  assert.equal(bands.size, CITIES.length, 'each city has a distinct band colour');
+  const bodies = new Set(CITIES.map((c) => liveryFor(c, 'emu').body.toLowerCase()));
+  assert.equal(bodies.size, CITIES.length, 'and a distinct body colour');
 });
 
 test('every line runs its own local — Mumbai has three', () => {
