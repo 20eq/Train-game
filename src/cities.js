@@ -105,17 +105,13 @@ export const CITIES = [
       passenger: { cars: 10, style: 'icf', capacity: 90 },
       express: { cars: 18, style: 'lhb', capacity: 72 },
     },
-    services: services('mumbai', [
-      { id: 'local', line: 'western', name: 'Western Line Local', kind: 'Suburban EMU · 12 cars',
-        stock: 'emu', cars: 12, loco: null, stops: 'all', vmax: 21, accel: 1.45, brake: 1.95,
-        blurb: 'A 12-car rake on the fast line. Doors every stop, quick off the mark, packed at Dadar.' },
-      { id: 'passenger', line: 'central', name: 'Panvel Passenger', kind: 'ICF rake · WAP-4',
-        stock: 'icf', cars: 10, loco: 'WAP4', stops: 'all', vmax: 23, accel: 0.9, brake: 1.5,
-        blurb: 'Ten ICF coaches behind a WAP-4. Heavy, slow away from the platform, and she stops everywhere.' },
-      { id: 'express', line: 'central', name: 'Mumbai Rajdhani', kind: 'LHB rake · WAP-7',
-        stock: 'lhb', cars: 18, loco: 'WAP7', stops: 'majors', vmax: 28, accel: 1.05, brake: 1.6,
-        blurb: 'Eighteen LHB coaches out of CSMT. Few stops, high speed, and the board decides your score.' },
-    ]),
+    // every line works its own loco — Western, Central and Harbour each have
+    // a local, a loco-hauled passenger and a named long-distance working
+    runs: {
+      western: { local: 'Western Line Local', passenger: 'Virar Passenger', express: 'Saurashtra Express' },
+      central: { local: 'Central Line Local', passenger: 'Igatpuri Passenger', express: 'Mumbai Rajdhani' },
+      harbour: { local: 'Harbour Line Local', passenger: 'Panvel Passenger', express: 'Konkan Kanya Express' },
+    },
   },
   {
     id: 'delhi',
@@ -179,17 +175,12 @@ export const CITIES = [
       passenger: { cars: 10, style: 'icf', capacity: 90 },
       express: { cars: 20, style: 'lhb', capacity: 72 },
     },
-    services: services('delhi', [
-      { id: 'local', line: 'ring', name: 'Ring Railway Local', kind: 'Suburban EMU · 8 cars',
-        stock: 'emu', cars: 8, loco: null, stops: 'all', vmax: 20, accel: 1.4, brake: 1.9,
-        blurb: 'The loop line around the capital. Short rake, tight curves, a platform every few minutes.' },
-      { id: 'passenger', line: 'gurgaon', name: 'Rewari Passenger', kind: 'ICF rake · WAP-4',
-        stock: 'icf', cars: 10, loco: 'WAP4', stops: 'all', vmax: 23, accel: 0.9, brake: 1.5,
-        blurb: 'Out of New Delhi down the Rewari road, stopping at every halt through Gurgaon.' },
-      { id: 'express', line: 'ghaziabad', name: 'Bhopal Shatabdi', kind: 'LHB rake · WAP-5',
-        stock: 'lhb', cars: 20, loco: 'WAP5', stops: 'majors', vmax: 29, accel: 1.1, brake: 1.65,
-        blurb: 'A WAP-5 and twenty LHB coaches. The fastest thing in this game, and it barely stops.' },
-    ]),
+    expressLoco: 'WAP5',
+    runs: {
+      ring: { local: 'Ring Railway Local', passenger: 'Sarai Rohilla Passenger', express: 'Sarai Rohilla Duronto' },
+      gurgaon: { local: 'Gurgaon Road Local', passenger: 'Rewari Passenger', express: 'Mewar Express' },
+      ghaziabad: { local: 'Ghaziabad Local', passenger: 'Meerut Passenger', express: 'Vaishali Express' },
+    },
   },
   {
     id: 'kolkata',
@@ -254,17 +245,11 @@ export const CITIES = [
       passenger: { cars: 10, style: 'icf', capacity: 90 },
       express: { cars: 17, style: 'lhb', capacity: 72 },
     },
-    services: services('kolkata', [
-      { id: 'local', line: 'circular', name: 'Circular Railway Local', kind: 'Suburban EMU · 9 cars',
-        stock: 'emu', cars: 9, loco: null, stops: 'all', vmax: 20, accel: 1.4, brake: 1.9,
-        blurb: 'Nine coaches round the maidan. Tight, riverside curves and a stop every two minutes.' },
-      { id: 'passenger', line: 'sealdah', name: 'Bandel Passenger', kind: 'ICF rake · WAP-4',
-        stock: 'icf', cars: 10, loco: 'WAP4', stops: 'all', vmax: 22, accel: 0.9, brake: 1.5,
-        blurb: 'The long Sealdah South working: ten coaches, every halt, and a lot of wet platform.' },
-      { id: 'express', line: 'howrah', name: 'Howrah Duronto', kind: 'LHB rake · WAP-7',
-        stock: 'lhb', cars: 17, loco: 'WAP7', stops: 'majors', vmax: 28, accel: 1.05, brake: 1.6,
-        blurb: 'Seventeen LHB coaches out of Howrah. Run the platform or run past it — the board decides.' },
-    ]),
+    runs: {
+      circular: { local: 'Circular Railway Local', passenger: 'Majerhat Passenger', express: 'Haldia Duronto' },
+      sealdah: { local: 'Sealdah South Local', passenger: 'Baruipur Passenger', express: 'Sundarban Express' },
+      howrah: { local: 'Howrah Local', passenger: 'Bandel Passenger', express: 'Howrah Duronto' },
+    },
   },
   {
     id: 'chennai',
@@ -331,17 +316,17 @@ export const CITIES = [
       passenger: { cars: 10, style: 'icf', capacity: 90 },
       express: { cars: 19, style: 'lhb', capacity: 72 },
     },
-    services: services('chennai', [
-      { id: 'local', line: 'south', name: 'Beach–Tambaram Local', kind: 'Suburban EMU · 9 cars',
-        stock: 'emu', cars: 9, loco: null, stops: 'all', vmax: 21, accel: 1.45, brake: 1.95,
-        blurb: 'The classic south line: Beach, Egmore, Guindy, Tambaram and every halt between.' },
-      { id: 'passenger', line: 'north', name: 'Arakkonam Passenger', kind: 'ICF rake · WAP-4',
-        stock: 'icf', cars: 10, loco: 'WAP4', stops: 'all', vmax: 22, accel: 0.9, brake: 1.5,
-        blurb: 'Ten ICF coaches north through Perambur and Avadi. Slow away, and it stops all the way.' },
-      { id: 'express', line: 'north', name: 'Coromandel Express', kind: 'LHB rake · WAP-7',
-        stock: 'lhb', cars: 19, loco: 'WAP7', stops: 'majors', vmax: 28, accel: 1.05, brake: 1.6,
-        blurb: 'Nineteen LHB coaches out of Central. Long rake, big speed, very few stops.' },
-    ]),
+    runs: {
+      south: { local: 'Beach–Tambaram Local', passenger: 'Chengalpattu Passenger', express: 'Pallavan Express' },
+      north: { local: 'North Line Local', passenger: 'Arakkonam Passenger', express: 'Coromandel Express' },
+      // the MRTS is an EMU-only corridor: a stopping local and a fast one
+      mrts: [
+        { type: 'local', name: 'MRTS Local' },
+        { type: 'local', id: 'fast', name: 'MRTS Fast Local', stops: 'majors', vmax: 25,
+          kind: 'Fast EMU · 9 cars',
+          blurb: 'The fast MRTS — no small halt calls, and the bay run at full speed.' },
+      ],
+    },
   },
 ];
 
@@ -361,8 +346,10 @@ export function getCity(id) {
 
 export function getService(city, serviceId) {
   const list = city.services || [];
-  if (!serviceId) return list.find((sv) => sv.id === 'express') || list[0];
-  return list.find((sv) => sv.id === serviceId) || list[0];
+  if (!serviceId) return list.find((sv) => sv.type === 'express') || list[0];
+  return list.find((sv) => sv.id === serviceId)
+    || list.find((sv) => sv.type === serviceId)
+    || list[0];
 }
 
 export function getLine(city, lineId) {
@@ -375,18 +362,92 @@ export function getLine(city, lineId) {
  * menu: a suburban local, a loco-hauled passenger, and a named express. Each
  * one names the line it works and the stock it turns out.
  */
-function services(city, defs) {
-  return defs.map((def) => ({ ...def, type: def.id, kindLabel: def.kind }));
+/**
+ * The three kinds of working a line can carry. Each service a city offers is
+ * one of these, bound to a line: a suburban EMU, a loco-hauled ICF passenger,
+ * or a long LHB express.
+ */
+const SERVICE_KINDS = {
+  local: { stock: 'emu', loco: null, stops: 'all', vmax: 21, accel: 1.45, brake: 1.95, cars: 'local' },
+  passenger: { stock: 'icf', loco: 'WAP4', stops: 'all', vmax: 23, accel: 0.9, brake: 1.5, cars: 'passenger' },
+  express: { stock: 'lhb', loco: 'WAP7', stops: 'majors', vmax: 28, accel: 1.05, brake: 1.6, cars: 'express' },
+};
+
+function defaultBlurb(type, line, cars, locoName) {
+  if (type === 'express') {
+    return `${cars} LHB coaches on the ${line.name}. Principal stops only, and the board decides your score.`;
+  }
+  if (type === 'passenger') {
+    return `A ${locoName || 'loco'} and ${cars} ICF coaches on the ${line.name}. Heavy, slow away, stops everywhere.`;
+  }
+  return `${cars} cars on the ${line.name}: doors at every platform, quick off the mark.`;
 }
 
-// resolve each service's line once the city table exists (the definitions above
-// are written before CITIES is built, so the lookup cannot live inside them)
-for (const city of CITIES) {
-  for (const sv of city.services) {
-    const line = city.lines.find((l) => l.id === sv.line) || city.lines[0];
-    sv.lineName = line.name;
-    sv.lineColour = line.colour;
+/**
+ * A city's services: every line gets the workings it actually runs. Most lines
+ * turn out a local, a passenger and an express; a line can declare its own list
+ * (or `null` for a working it never runs), so an EMU-only corridor stays honest.
+ */
+function buildServices(city) {
+  const out = [];
+  const stockOf = (kind) => city.stock?.[kind] || { cars: 9 };
+
+  for (const line of city.lines) {
+    const declared = (city.runs || {})[line.id];
+
+    let defs;
+    if (Array.isArray(declared)) {
+      defs = declared;
+    } else {
+      defs = ['local', 'passenger', 'express']
+        .map((type) => {
+          const run = declared ? declared[type] : undefined;
+          if (run === null) return null;
+          if (typeof run === 'string') return { type, name: run };
+          return { type, ...(run || {}) };
+        })
+        .filter(Boolean);
+    }
+
+    for (const def of defs) {
+      const type = def.type || 'local';
+      const base = SERVICE_KINDS[type] || SERVICE_KINDS.local;
+      const cars = def.cars || stockOf(base.cars).cars;
+      const stock = def.stock || base.stock;
+      const loco = def.loco !== undefined
+        ? def.loco
+        : (type === 'express' ? (city.expressLoco || base.loco) : base.loco);
+      const locoName = loco ? (LOCOS[loco]?.class || loco) : null;
+      const kindLabel = def.kind || (locoName
+        ? `${stock === 'lhb' ? 'LHB' : 'ICF'} rake · ${locoName}`
+        : `Suburban EMU · ${cars} cars`);
+
+      out.push({
+        id: `${line.id}-${def.id || type}`,
+        type,
+        line: line.id,
+        lineName: line.name,
+        lineColour: line.colour,
+        name: def.name || `${line.name} ${type}`,
+        kindLabel,
+        stock,
+        loco,
+        cars,
+        stops: def.stops || base.stops,
+        vmax: def.vmax || base.vmax,
+        accel: def.accel || base.accel,
+        brake: def.brake || base.brake,
+        blurb: def.blurb || defaultBlurb(type, line, cars, locoName),
+      });
+    }
   }
+  return out;
+}
+
+/** The workings a single line offers. */
+export function servicesFor(city, lineId) {
+  const list = city.services || [];
+  return lineId ? list.filter((sv) => sv.line === lineId) : list;
 }
 
 /** What a city runs: used by the sim and by the 3D builder. */
@@ -401,4 +462,10 @@ export function stockFor(city, kind) {
 export function liveryFor(city, style) {
   const rolling = city.rolling || {};
   return rolling[style] || rolling.emu || city.livery;
+}
+
+// Every city's workings are built once the loco table exists: each line gets
+// the services it really runs.
+for (const city of CITIES) {
+  city.services = buildServices(city);
 }

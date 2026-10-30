@@ -97,40 +97,63 @@ test('each city runs its own rolling stock, with long rakes', () => {
   assert.ok(seen.size >= 3, 'the cities should not all run identical formations');
 });
 
-test('every city offers a local, a passenger and an express', () => {
+test('every line runs its own local — Mumbai has three', () => {
   for (const city of CITIES) {
-    assert.equal(city.services.length, 3, `${city.id} needs three services`);
-    const ids = city.services.map((s) => s.id);
-    assert.deepEqual(ids, ['local', 'passenger', 'express']);
+    const ids = city.services.map((sv) => sv.id);
+    assert.equal(new Set(ids).size, ids.length, `${city.id} has duplicate service ids`);
 
-    const [local, passenger, express] = city.services;
-    assert.equal(local.stock, 'emu');
-    assert.equal(passenger.stock, 'icf');
-    assert.equal(passenger.loco, 'WAP4', 'a passenger working is loco hauled');
-    assert.equal(express.stock, 'lhb');
-    assert.ok(express.loco === 'WAP7' || express.loco === 'WAP5');
+    for (const line of city.lines) {
+      const onLine = city.services.filter((sv) => sv.line === line.id);
+      assert.ok(onLine.length >= 1, `${city.id}/${line.id} offers nothing to drive`);
 
-    // each service names the line it works
-    for (const sv of city.services) {
-      assert.ok(city.lines.some((l) => l.id === sv.line), `${city.id}/${sv.id} names a real line`);
-      const line = city.lines.find((l) => l.id === sv.line);
-      assert.equal(sv.lineName, line.name, `${city.id}/${sv.id} carries its line name`);
+      const local = onLine.find((sv) => sv.type === 'local');
+      assert.ok(local, `${city.id}/${line.id} has no local`);
+      assert.equal(local.stock, 'emu', `${city.id}/${line.id} local is suburban EMU stock`);
+      assert.equal(local.loco, null, 'a suburban local is not locomotive hauled');
+      assert.equal(local.lineName, line.name);
+      assert.equal(local.lineColour, line.colour);
+      assert.ok(local.cars >= 8 && local.cars <= 12, `${city.id}/${line.id} local has ${local.cars} cars`);
+
+      // a loco-hauled working, where the line carries one, is genuinely different
+      const passenger = onLine.find((sv) => sv.type === 'passenger');
+      if (passenger) {
+        assert.equal(passenger.stock, 'icf');
+        assert.equal(passenger.loco, 'WAP4');
+        assert.ok(passenger.cars >= 8);
+      }
+      const express = onLine.find((sv) => sv.type === 'express');
+      if (express) {
+        assert.equal(express.stock, 'lhb');
+        assert.ok(['WAP7', 'WAP5'].includes(express.loco), 'the express is electric-hauled');
+        assert.equal(express.stops, 'majors');
+        if (passenger) assert.ok(express.cars > passenger.cars, 'the express carries the longest rake');
+      }
     }
-    assert.ok(express.cars > passenger.cars, 'the express carries the longest rake');
-    assert.equal(express.stops, 'majors');
-    assert.equal(local.stops, 'all');
-    assert.ok(passenger.accel < local.accel, 'a loco and ten coaches pull away slower than an EMU');
   }
 
-  // and each one actually builds
+  // Mumbai's three lines each have a local with its own name and line
+  const mumbai = CITIES.find((c) => c.id === 'mumbai');
+  const locals = mumbai.services.filter((sv) => sv.type === 'local');
+  assert.equal(locals.length, 3, 'Western, Central and Harbour each run a local');
+  assert.deepEqual(locals.map((sv) => sv.line), ['western', 'central', 'harbour']);
+  assert.equal(new Set(locals.map((sv) => sv.name)).size, 3, 'and each has its own name');
+  assert.equal(mumbai.services.length, 9, 'three lines x three classes of working');
+});
+
+test('every service builds its own run, on its own line', () => {
   for (const city of CITIES) {
-    for (const sv of ['local', 'passenger', 'express']) {
-      const world = createWorld({ city: city.id, service: sv });
+    for (const sv of city.services) {
+      const world = createWorld({ city: city.id, service: sv.id });
       const train = world.trains[0];
-      assert.equal(train.name, city.services.find((s) => s.id === sv).name);
-      assert.equal(train.stock, city.services.find((s) => s.id === sv).stock);
-      assert.equal(train.loco, city.services.find((s) => s.id === sv).loco);
-      assert.equal(train.pathId, city.services.find((s) => s.id === sv).line, 'the service runs its own line');
+      assert.equal(world.service.id, sv.id, `${sv.id} resolves to itself`);
+      assert.equal(train.name, sv.name);
+      assert.equal(train.stock, sv.stock);
+      assert.equal(train.loco, sv.loco);
+      assert.equal(train.pathId, sv.line, 'the service runs the line it names');
+      assert.equal(train.coaches, sv.cars);
+      assert.ok(world.paths[sv.line], 'and that line exists');
+      // the picker's line map needs stations to draw
+      assert.ok(world.stationsOnPath[sv.line].length >= 10);
     }
   }
 });

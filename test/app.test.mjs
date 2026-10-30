@@ -51,21 +51,27 @@ test('the title card offers a different local for every city', () => {
   }
 });
 
-test('a city opens its Drive menu, and a service starts the run', () => {
+test('a city opens its line menu, then a line opens its trains', () => {
   const card = env.elements.get('cityCards').children.find((c) => c.dataset.city === 'kolkata');
   assert.ok(card, 'Kolkata should be on the title card');
   card.emit('click');
 
   const panel = env.elements.get('servicePanel');
   assert.equal(panel.classList.contains('hidden'), false, 'the Drive menu should open');
-  const list = panel.children[0].children.find((c) => c.className === 'cities');
-  const ids = list.children.map((c) => c.dataset.service);
-  assert.equal(panel.children[0].className, 'card wide', 'the menu sits in its own card');
-  assert.deepEqual(ids, ['local', 'passenger', 'express'], 'local, passenger and express on every line');
+  assert.equal(app.menuStep, 'lines', 'a city asks for a line first');
+  const lines = panel.children[0].children.find((c) => c.className === 'cities');
+  assert.deepEqual(lines.children.map((c) => c.dataset.line), ['circular', 'sealdah', 'howrah']);
+
+  lines.children[2].emit('click');
+  assert.equal(app.menuStep, 'services', 'a line asks for a train next');
+  const trains = panel.children[0].children.find((c) => c.className === 'cities');
+  const ids = trains.children.map((c) => c.dataset.service);
+  assert.deepEqual(ids, ['howrah-local', 'howrah-passenger', 'howrah-express'], 'local, passenger and express');
 
   // run the local first
-  list.children[0].emit('click');
+  trains.children[0].emit('click');
   assert.equal(app.world.city.id, 'kolkata');
+  assert.equal(app.world.trains[0].pathId, 'howrah', 'it runs the line it was picked on');
   assert.equal(app.world.trains[0].stock, 'emu', 'the local is an EMU');
   assert.equal(app.world.trains[0].loco, null);
   assert.equal(app.ui.paused, false);
@@ -74,10 +80,35 @@ test('a city opens its Drive menu, and a service starts the run', () => {
   assert.match(env.elements.get('serviceName').textContent, new RegExp(app.world.service.name));
 });
 
-test('the Drive menu offers three different machines to drive', () => {
+test('every line in Mumbai runs its own local', () => {
+  app.backToTitle();
+  env.elements.get('cityCards').children.find((c) => c.dataset.city === 'mumbai').emit('click');
+  const panel = env.elements.get('servicePanel');
+  const lines = panel.children[0].children.find((c) => c.className === 'cities');
+  assert.equal(lines.children.length, 3, 'Mumbai has three lines');
+
+  const locals = [];
+  for (let i = 0; i < lines.children.length; i++) {
+    lines.children[i].emit('click');
+    const trains = panel.children[0].children.find((c) => c.className === 'cities');
+    const local = trains.children.find((c) => c.dataset.service.endsWith('-local'));
+    assert.ok(local, `line ${i} has a local of its own`);
+    local.emit('click');
+    locals.push({ name: app.world.trains[0].name, line: app.world.trains[0].pathId });
+    app.backToTitle();
+    env.elements.get('cityCards').children.find((c) => c.dataset.city === 'mumbai').emit('click');
+  }
+
+  assert.deepEqual(locals.map((l) => l.line), ['western', 'central', 'harbour']);
+  assert.equal(new Set(locals.map((l) => l.name)).size, 3, 'and each local has its own name');
+});
+
+test('a line offers three genuinely different machines', () => {
   app.backToTitle();
   env.elements.get('cityCards').children[3].emit('click');
-  const list = env.elements.get('servicePanel').children[0].children.find((c) => c.className === 'cities');
+  const panel = env.elements.get('servicePanel');
+  panel.children[0].children.find((c) => c.className === 'cities').children[1].emit('click');  // Chennai north
+  const list = panel.children[0].children.find((c) => c.className === 'cities');
 
   const seen = [];
   for (const card of list.children) {
@@ -90,6 +121,7 @@ test('the Drive menu offers three different machines to drive', () => {
   assert.deepEqual(seen.map((x) => x.loco), [null, 'WAP4', 'WAP7']);
   assert.ok(seen[2].cars > seen[1].cars, 'the express is the longest rake');
   assert.ok(seen[0].cars >= 8, 'a suburban rake is at least eight cars');
+  assert.ok(seen.every((x) => x.id.startsWith('north-')), 'all three work the same line');
 });
 
 test('frames advance the timetable and draw every time', () => {
@@ -238,14 +270,16 @@ test('the picker survives a browser without WebGL', () => {
   const cards = env.elements.get('cityCards');
   assert.equal(cards.children.length, 4, 'and the menu is still there to choose from');
   cards.children[2].emit('click');
-  const list = env.elements.get('servicePanel').children[0].children.find((c) => c.className === 'cities');
-  list.children[2].emit('click');
+  const panel = env.elements.get('servicePanel');
+  panel.children[0].children.find((c) => c.className === 'cities').children[2].emit('click');  // howrah
+  panel.children[0].children.find((c) => c.className === 'cities').children[2].emit('click');  // express
   assert.equal(broken.world.city.id, 'kolkata');
   assert.equal(broken.world.trains[0].stock, 'lhb');
+  assert.equal(broken.world.trains[0].pathId, 'howrah');
   broken.tick(1000);
 });
 
-test('number keys pick a city, then a service', () => {
+test('number keys walk the menu: city, then line, then train', () => {
   // booted last, so this instance owns the keyboard
   const fresh = bootApp({
     createRenderer: () => ({ render() {}, setSize() {}, setPixelRatio() {} }),
@@ -254,8 +288,20 @@ test('number keys pick a city, then a service', () => {
   env.press('Digit2');
   const panel = env.elements.get('servicePanel');
   assert.equal(panel.classList.contains('hidden'), false, 'a city key opens its Drive menu');
+  assert.equal(fresh.menuStep, 'lines');
+
+  env.press('Digit3');
+  assert.equal(fresh.menuStep, 'services', 'key 3 picks the third line');
+
+  // escape walks back up the menu instead of starting a run
+  env.press('Escape');
+  assert.equal(fresh.menuStep, 'lines', 'escape goes back to the line list');
+  assert.equal(panel.classList.contains('hidden'), false, 'and the menu stays open');
+
+  env.press('Digit3');
   env.press('Digit3');
   assert.equal(fresh.world.city.id, 'delhi');
+  assert.equal(fresh.world.trains[0].pathId, 'ghaziabad', 'the third line in Delhi');
   assert.equal(fresh.world.trains[0].stock, 'lhb', 'key 3 is the express');
   fresh.stop();
 });

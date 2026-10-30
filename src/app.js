@@ -5,7 +5,7 @@
  */
 
 import * as THREE from '../vendor/three.module.js';
-import { CITIES, LOCOS, getCity, getService, liveryFor } from './cities.js';
+import { CITIES, LOCOS, getCity, getService, liveryFor, servicesFor } from './cities.js';
 import { createWorld } from './world.js';
 import { buildWorld3D, updateWorld3D, cameraPose, createRenderer, moveCab } from './scene3d.js';
 import {
@@ -55,6 +55,8 @@ export function bootApp(options = {}) {
   const NOTCHES = 8;
   let serviceId = options.service || 'express';
   let pendingCity = options.city || 'mumbai';
+  let pendingLine = null;
+  let menuStep = 'lines';   // 'lines' | 'services' — which card the Drive panel shows
 
   let audio = null;
   function horn(on) {
@@ -184,7 +186,8 @@ export function bootApp(options = {}) {
 
       const fleet = document.createElement('span');
       fleet.className = 'fleet';
-      fleet.textContent = `${city.lines.length} lines · ${localStock.cars}-car locals · ${expressStock.cars}-coach express`;
+      fleet.textContent = `${city.lines.length} lines · ${localStock.cars}-car locals · ${expressStock.cars}-coach express`
+        + ` · ${city.services.length} services`;
 
       const blurb = document.createElement('span');
       blurb.className = 'blurb';
@@ -201,36 +204,138 @@ export function bootApp(options = {}) {
       card.append(key, swatch, body, go);
       card.addEventListener('click', (event) => {
         event.preventDefault();
-        showServices(city.id);
+        showLines(city.id);
       });
       el.cityCards.appendChild(card);
     });
   }
 
-  /** The Drive menu: pick which service to run on this line. */
-  function showServices(cityId) {
-    pendingCity = cityId;
-    const city = getCity(cityId);
-    if (!el.servicePanel) return;
+  /** A small shared header for both steps of the Drive menu. */
+  function menuShell(city, heading, subheading) {
     el.servicePanel.innerHTML = '';
-
     const card = document.createElement('div');
     card.className = 'card wide';
     el.servicePanel.appendChild(card);
 
-    const heading = document.createElement('p');
-    heading.className = 'studio';
-    heading.textContent = `${city.city} · ${city.lines.map((l) => l.name).join(' · ')}`;
-    card.appendChild(heading);
+    const eyebrow = document.createElement('p');
+    eyebrow.className = 'studio';
+    eyebrow.textContent = `${city.city} · ${subheading}`;
+    card.appendChild(eyebrow);
+
+    const title = document.createElement('h2');
+    title.className = 'menu-title';
+    title.textContent = heading;
+    card.appendChild(title);
 
     const list = document.createElement('div');
     list.className = 'cities';
+    card.appendChild(list);
+    return { card, list };
+  }
 
-    for (const service of city.services) {
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'city service';
-      card.dataset.service = service.id;
+  function setBack(card, label, handler) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'ghost';
+    back.textContent = label;
+    back.addEventListener('click', handler);
+    card.appendChild(back);
+  }
+
+  function openPanel() {
+    show(el.overlayTitle, false);
+    el.servicePanel.removeAttribute('hidden');
+    show(el.servicePanel, true);
+  }
+
+  /**
+   * Step one of the Drive menu: which of this city's lines are you working?
+   * Every line keeps its own roster, so the next step shows only its trains.
+   */
+  function showLines(cityId) {
+    pendingCity = cityId;
+    pendingLine = null;
+    menuStep = 'lines';
+    const city = getCity(cityId);
+    if (!el.servicePanel) return;
+
+    const { card, list } = menuShell(city, 'Which line?', city.lines.map((l) => l.name).join(' · '));
+
+    city.lines.forEach((line, index) => {
+      const services = servicesFor(city, line.id);
+      const local = services.find((sv) => sv.type === 'local');
+      const express = services.find((sv) => sv.type === 'express');
+      const stations = line.stations.length;
+
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'city line';
+      row.dataset.line = line.id;
+
+      const key = document.createElement('span');
+      key.className = 'key';
+      key.textContent = String(index + 1);
+
+      const swatch = document.createElement('span');
+      swatch.className = 'swatch';
+      for (const colour of [line.colour, liveryFor(city, 'emu').body, liveryFor(city, 'lhb').body]) {
+        const band = document.createElement('i');
+        band.style.background = colour;
+        swatch.appendChild(band);
+      }
+
+      const body = document.createElement('span');
+      body.className = 'body';
+      const name = document.createElement('strong');
+      name.textContent = line.name;
+      const note = document.createElement('em');
+      note.textContent = line.note;
+      const fleet = document.createElement('span');
+      fleet.className = 'fleet';
+      fleet.textContent = `${stations} stations · ${services.length} services`
+        + (local ? ` · ${local.cars}-car locals` : '')
+        + (express ? ` · ${express.cars}-coach express` : '');
+      const blurb = document.createElement('span');
+      blurb.className = 'blurb';
+      blurb.textContent = services.map((sv) => sv.name).join(' · ');
+      body.append(name, note, fleet, blurb);
+
+      const go = document.createElement('span');
+      go.className = 'go';
+      go.textContent = '▶';
+
+      row.append(key, swatch, body, go);
+      row.addEventListener('click', (event) => {
+        event.preventDefault();
+        showServices(city.id, line.id);
+      });
+      list.appendChild(row);
+    });
+
+    setBack(card, '← back to cities', () => {
+      show(el.servicePanel, false);
+      el.servicePanel.setAttribute('hidden', '');
+      show(el.overlayTitle, true);
+    });
+    openPanel();
+  }
+
+  /** Step two: the trains working that line — local, passenger, express. */
+  function showServices(cityId, lineId) {
+    pendingCity = cityId;
+    const city = getCity(cityId);
+    const line = city.lines.find((l) => l.id === lineId) || city.lines[0];
+    pendingLine = line.id;
+    menuStep = 'services';
+    if (!el.servicePanel) return;
+
+    const { card, list } = menuShell(city, line.name, line.note);
+
+    servicesFor(city, line.id).forEach((service) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'city service';
+      row.dataset.service = service.id;
 
       const badge = document.createElement('span');
       badge.className = 'badge';
@@ -252,8 +357,8 @@ export function bootApp(options = {}) {
       body.className = 'body';
       const name = document.createElement('strong');
       name.textContent = service.name;
-      const line = document.createElement('em');
-      line.textContent = `${service.lineName} · ${service.kindLabel}`;
+      const kind = document.createElement('em');
+      kind.textContent = service.kindLabel;
       const fleet = document.createElement('span');
       fleet.className = 'fleet';
       fleet.textContent = `${service.cars}-coach rake · ${Math.round(service.vmax * 3.6)} km/h · `
@@ -261,38 +366,23 @@ export function bootApp(options = {}) {
       const blurb = document.createElement('span');
       blurb.className = 'blurb';
       blurb.textContent = service.blurb;
-      body.append(name, line, fleet, blurb);
+      body.append(name, kind, fleet, blurb);
 
       const go = document.createElement('span');
       go.className = 'go';
       go.textContent = '▶';
 
-      card.append(badge, swatch, body, go);
-      card.addEventListener('click', (event) => {
+      row.append(badge, swatch, body, go);
+      row.addEventListener('click', (event) => {
         event.preventDefault();
         startCity(city.id, service.id);
       });
-      list.appendChild(card);
-    }
-
-    card.appendChild(list);
-
-    const back = document.createElement('button');
-    back.type = 'button';
-    back.className = 'ghost';
-    back.textContent = '← back to cities';
-    back.addEventListener('click', () => {
-      show(el.servicePanel, false);
-      el.servicePanel.setAttribute('hidden', '');
-      show(el.overlayTitle, true);
+      list.appendChild(row);
     });
-    card.appendChild(back);
 
-    show(el.overlayTitle, false);
-    el.servicePanel.removeAttribute('hidden');
-    show(el.servicePanel, true);
+    setBack(card, `← back to ${city.city} lines`, () => showLines(city.id));
+    openPanel();
   }
-
 
   function startCity(cityId, nextServiceId = serviceId) {
     const city = getCity(cityId);
@@ -575,8 +665,23 @@ export function bootApp(options = {}) {
     if (serviceOpen) {
       const n = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];
       if (n !== undefined) {
-        const sv = getCity(pendingCity || 'mumbai').services[n];
-        if (sv) startCity(pendingCity, sv.id);
+        const city = getCity(pendingCity || 'mumbai');
+        if (menuStep === 'lines') {
+          const line = city.lines[n];
+          if (line) { e.preventDefault(); showServices(city.id, line.id); }
+        } else {
+          const sv = servicesFor(city, pendingLine)[n];
+          if (sv) { e.preventDefault(); startCity(city.id, sv.id); }
+        }
+      }
+      if (e.code === 'Escape' || e.code === 'Backspace') {
+        e.preventDefault();
+        if (menuStep === 'services') showLines(pendingCity || 'mumbai');
+        else {
+          show(el.servicePanel, false);
+          el.servicePanel.setAttribute('hidden', '');
+          show(el.overlayTitle, true);
+        }
       }
       return;
     }
@@ -586,7 +691,7 @@ export function bootApp(options = {}) {
       const n = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 }[e.code];
       if (n !== undefined && CITIES[n]) {
         e.preventDefault();
-        showServices(CITIES[n].id);
+        showLines(CITIES[n].id);
       }
       return;
     }
@@ -774,6 +879,7 @@ export function bootApp(options = {}) {
 
   const api = {
     start, startCity, backToTitle, tick, updateHud, togglePause, cycleCamera, stop: detach,
+    showLines, showServices, get menuStep() { return menuStep; },
     rendererError,
     ui, controls, keys, camera, renderer,
     get world() { return world; },

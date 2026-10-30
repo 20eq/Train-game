@@ -483,6 +483,18 @@ button.chip:hover { background: rgba(255, 207, 92, 0.14); border-color: rgba(255
 /* service picker */
 .city.service { grid-template-columns: auto minmax(88px, 120px) 1fr auto; }
 
+/* the line step of the Drive menu: key, line colours, line name, go */
+.city.line { grid-template-columns: auto minmax(88px, 120px) 1fr auto; }
+.city.line .swatch i:nth-child(1) { height: 12px; }
+.city.line em { color: rgba(238, 242, 236, 0.72); }
+
+#servicePanel h2 {
+  text-align: center;
+  margin: 0 0 4px;
+  font-size: clamp(20px, 2.6vw, 30px);
+  letter-spacing: -0.02em;
+}
+
 .city .badge {
   align-self: start;
   font-size: clamp(8px, 0.7vw, 9px);

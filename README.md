@@ -9,39 +9,51 @@ from any static server, offline.
 
 ```bash
 npm start     # http://localhost:5173
-npm test      # 46 node tests: cities, sim, 3D scene, headless app boot
+npm test      # 49 node tests: cities, sim, 3D scene, headless app boot
 python3 -m unittest discover -s test   # 27 tests for auth.py
 ```
 
 | | |
 | --- | --- |
-| ![The picker](docs/menu.png) | ![Drive menu](docs/services.png) |
-| *Pick a city — every one runs three real lines* | *Then pick your train: local, passenger or express* |
+| ![The picker](docs/menu.png) | ![Lines](docs/lines-mumbai.png) |
+| *Pick a city* | *Then the line you want to work* |
+| ![Drive menu](docs/services.png) | ![Chennai lineside](docs/lineside-chennai.png) |
+| *Then the trains on that line* | *Chennai — a nine-car local at a halt* |
 | ![Mumbai cab](docs/cab-mumbai.png) | ![Kolkata chase](docs/chase-kolkata.png) |
 | *Mumbai — Western Line, from the cab* | *Kolkata — chase camera off the shoulder* |
-| ![Chennai lineside](docs/lineside-chennai.png) | ![Mumbai network](docs/network-mumbai.png) |
-| *Chennai — a nine-car local at a halt* | *Mumbai — Western, Central and Harbour in one corridor* |
+| ![Mumbai network](docs/network-mumbai.png) | |
+| *Mumbai — Western, Central and Harbour in one corridor* | |
 
-## Four cities, three real lines each
+## Four cities, three real lines each — 35 services
 
-Choose a city on the title card — click a row or press `1`–`4` — then choose
-which train to drive on its Drive menu. Each city grows its own network from
-its own seed, and its lines run as parallel corridors, so from the cab you can
-see the next line's masts, platforms and trains.
+Choose a city (`1`–`4`), then the **line** you want to work, then the **train**
+on that line. Every line keeps its own roster: Mumbai's Western runs a 12-car
+local, a Virar passenger and the Saurashtra Express; its Harbour runs a local,
+the Panvel passenger and the Konkan Kanya. You never pick a train that doesn't
+belong to the line you're about to drive.
 
-| City | Lines | Local | Passenger | Express |
+| City | Line | Local | Passenger | Express |
 | --- | --- | --- | --- | --- |
-| Mumbai | Western · Central · Harbour | 12-car EMU, Western | Panvel Passenger, Central (ICF · WAP-4) | Mumbai Rajdhani, Central (18 LHB · WAP-7) |
-| Delhi | Ring · Gurgaon · Ghaziabad | 8-car EMU, Ring | Rewari Passenger, Gurgaon (ICF · WAP-4) | Bhopal Shatabdi, Ghaziabad (20 LHB · WAP-5) |
-| Kolkata | Circular · Sealdah South · Howrah Main | 9-car EMU, Circular | Bandel Passenger, Sealdah (ICF · WAP-4) | Howrah Duronto, Howrah (17 LHB · WAP-7) |
-| Chennai | South · North · MRTS | 9-car EMU, South | Arakkonam Passenger, North (ICF · WAP-4) | Coromandel Express, North (19 LHB · WAP-7) |
+| **Mumbai** | Western | Western Line Local, 12-car EMU | Virar Passenger (ICF · WAP-4) | Saurashtra Express (18 LHB · WAP-7) |
+| | Central | Central Line Local, 12-car EMU | Igatpuri Passenger (ICF · WAP-4) | Mumbai Rajdhani (18 LHB · WAP-7) |
+| | Harbour | Harbour Line Local, 12-car EMU | Panvel Passenger (ICF · WAP-4) | Konkan Kanya Express (18 LHB · WAP-7) |
+| **Delhi** | Ring | Ring Railway Local, 8-car EMU | Sarai Rohilla Passenger (ICF · WAP-4) | Sarai Rohilla Duronto (20 LHB · WAP-5) |
+| | Gurgaon | Gurgaon Road Local, 8-car EMU | Rewari Passenger (ICF · WAP-4) | Mewar Express (20 LHB · WAP-5) |
+| | Ghaziabad | Ghaziabad Local, 8-car EMU | Meerut Passenger (ICF · WAP-4) | Vaishali Express (20 LHB · WAP-5) |
+| **Kolkata** | Circular | Circular Railway Local, 9-car EMU | Majerhat Passenger (ICF · WAP-4) | Haldia Duronto (17 LHB · WAP-7) |
+| | Sealdah South | Sealdah South Local, 9-car EMU | Baruipur Passenger (ICF · WAP-4) | Sundarban Express (17 LHB · WAP-7) |
+| | Howrah Main | Howrah Local, 9-car EMU | Bandel Passenger (ICF · WAP-4) | Howrah Duronto (17 LHB · WAP-7) |
+| **Chennai** | South | Beach–Tambaram Local, 9-car EMU | Chengalpattu Passenger (ICF · WAP-4) | Pallavan Express (19 LHB · WAP-7) |
+| | North | North Line Local, 9-car EMU | Arakkonam Passenger (ICF · WAP-4) | Coromandel Express (19 LHB · WAP-7) |
+| | MRTS | MRTS Local · MRTS Fast Local (EMU only) | — | — |
 
 **Three different machines, not three liveries.** A local is an EMU: flat cab
-end, four doors a side, white body with the city's band, twelve cars in Mumbai
-and eight or nine elsewhere, quick away and 20–21 m/s flat out. A passenger is
-a WAP-4 and ten cream ICF coaches: ribbed sides, slow off the mark, stops at
-every station. An express is a WAP-7 (or a WAP-5 in Delhi) and 17–20 LHB
-coaches: navy or maroon sealed stock, 28–29 m/s, stops only at the majors.
+end, four doors a side, white body with the city's band, quick away and 20–21
+m/s flat out. A passenger is a WAP-4 and ten cream ICF coaches: ribbed sides,
+slow off the mark, stops at every station. An express is a WAP-7 (a WAP-5 in
+Delhi) and 17–20 LHB coaches: sealed navy or maroon stock, 28–29 m/s, principal
+stops only. The MRTS is an EMU-only corridor, so its line offers a stopping
+local and a fast one instead of stock it never carries.
 
 Every network carries seven trains — yours, a superfast coming the other way,
 a local ahead of you, and a local plus a passenger on each of the other two
@@ -86,7 +98,7 @@ your train moving along it and the traffic on the same line moving with you.
 | `1` `2` `3` | jump straight to cab / chase / lineside |
 
 At the title card, `1`–`4` pick a city; inside the Drive menu, `1`–`3` pick a
-service.
+line, then `1`–`3` pick a train. `Esc` walks back up the menu.
 
 ## How it works
 
