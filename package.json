@@ -1,0 +1,14 @@
+{
+  "name": "train-guard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Train Driver \u2014 an open-world Western Line cab sim.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Train Driver — Indian Locals</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <main id="hud" class="hidden">
+    <header class="topbar">
+      <div class="place">
+        <span class="eyebrow" id="cityName">Mumbai</span>
+        <strong class="line" id="lineName">Western Line</strong>
+      </div>
+      <div class="status">
+        <span class="clock" id="clock">06:00</span>
+        <span class="score" id="scoreValue">0</span>
+      </div>
+      <div class="nextstop">
+        <span class="eyebrow">next stop</span>
+        <strong id="nextName">Churchgate</strong>
+        <span class="dist" id="nextDist">—</span>
+        <ol class="stops" id="stopList"></ol>
+      </div>
+    </header>
+
+    <footer class="dash">
+      <div class="lamps" id="lamps">
+        <span class="lamp" id="lampDoors"><i></i>doors</span>
+        <span class="lamp" id="lampSignal"><i></i>signal</span>
+        <span class="lamp" id="lampLimit"><i></i>limit</span>
+        <span class="lamp" id="lampHorn"><i></i>horn</span>
+      </div>
+
+      <div class="gauge">
+        <div class="dial">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <path class="face" d="M14 96a46 46 0 1 1 92 0" />
+            <path class="ticks" d="M22 92a38 38 0 0 1 76 0" />
+            <line id="needle" x1="60" y1="60" x2="60" y2="26" />
+            <circle class="hub" cx="60" cy="60" r="4" />
+          </svg>
+          <span class="readout"><strong id="speedValue">0</strong><em>km/h</em></span>
+          <span class="limit" id="limitBadge">100</span>
+        </div>
+
+        <div class="levers">
+          <div class="lever">
+            <span>power</span>
+            <div class="track"><i id="powerBar"></i></div>
+          </div>
+          <div class="lever">
+            <span>brake</span>
+            <div class="track brake"><i id="brakeBar"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta">
+        <span class="cam" id="camName">cab</span>
+        <span class="hint">C camera · TAB train · T autopilot</span>
+        <button class="chip" type="button" id="cityBtn">change city</button>
+      </div>
+    </footer>
+
+    <div class="ticker" id="ticker"></div>
+  </main>
+
+  <div class="overlay" id="overlayTitle">
+    <div class="card wide">
+      <p class="studio">Indian Locals · Four Cities of Track</p>
+      <h1>TRAIN DRIVER</h1>
+      <p class="lede">
+        Choose a line. You start in the cab of a long-distance express — a
+        locomotive and a full rake of coaches — with locals, fast services and
+        a branch shuttle working the same rails around you.
+      </p>
+
+      <div class="cities" id="cityCards"></div>
+
+      <p class="hint">Click a line, or press 1 – 4</p>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="overlayPause">
+    <div class="card">
+      <p class="studio">Intermission</p>
+      <h2>Held at the signal</h2>
+      <p class="lede" id="pauseStats">—</p>
+      <div class="buttons">
+        <button class="primary" type="button" id="resumeBtn">Back to the cab</button>
+        <button class="ghost" type="button" id="titleBtn">Change city</button>
+      </div>
+      <p class="hint">P or Esc to resume</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { bootApp } from './src/app.js';
+    bootApp();
+  </script>
+</body>
+</html>
