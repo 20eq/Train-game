@@ -85,7 +85,23 @@ class Element {
 
   appendChild(child) {
     this.children.push(child);
+    // non-enumerable, so a debugging JSON.stringify of the tree does not cycle
+    Object.defineProperty(child, 'parentNode', { value: this, writable: true, enumerable: false });
     return child;
+  }
+
+  removeChild(child) {
+    const i = this.children.indexOf(child);
+    if (i >= 0) this.children.splice(i, 1);
+    return child;
+  }
+
+  remove() {
+    if (this.parentNode?.removeChild) this.parentNode.removeChild(this);
+  }
+
+  get firstElementChild() {
+    return this.children[0] || null;
   }
 
   set innerHTML(value) {

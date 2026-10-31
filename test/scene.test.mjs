@@ -12,6 +12,7 @@ globalThis.document ??= {
     getContext: () => ({
       fillRect() {}, fillText() {}, measureText: () => ({ width: 10 }),
       createLinearGradient: () => ({ addColorStop() {} }),
+      createRadialGradient: () => ({ addColorStop() {} }),
       set fillStyle(v) {}, set font(v) {}, set textAlign(v) {}, set textBaseline(v) {},
     }),
   }),

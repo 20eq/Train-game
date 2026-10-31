@@ -98,6 +98,67 @@ export function bootApp(options = {}) {
   let hudClock = 0;
   let summaryShown = false;
 
+  /* ------------------------------- career ------------------------------
+   * A driver keeps their rank between runs. XP is awarded at the end of a
+   * run from the score, so a clean run actually advances you.
+   */
+  const RANKS = [
+    { name: 'Trainee', at: 0 },
+    { name: 'Assistant Driver', at: 1200 },
+    { name: 'Shunter', at: 3000 },
+    { name: 'Main Line Driver', at: 6000 },
+    { name: 'Senior Driver', at: 12000 },
+    { name: 'Loco Pilot', at: 22000 },
+    { name: 'Motorman', at: 40000 },
+  ];
+
+  const memoryStore = new Map();
+  const store = {
+    get(key, fallback) {
+      try {
+        const raw = globalThis.localStorage?.getItem(key);
+        if (raw != null) return JSON.parse(raw);
+      } catch { /* private mode, no storage: keep it in memory */ }
+      return memoryStore.has(key) ? memoryStore.get(key) : fallback;
+    },
+    set(key, value) {
+      memoryStore.set(key, value);
+      try {
+        globalThis.localStorage?.setItem(key, JSON.stringify(value));
+      } catch { /* not persisting is not a failure */ }
+    },
+  };
+
+  const career = store.get('trainDriver.career', { xp: 0, runs: 0, best: 0 });
+
+  function rankFor(xp) {
+    let rank = RANKS[0];
+    for (const r of RANKS) if (xp >= r.at) rank = r;
+    return rank;
+  }
+
+  function nextRankFor(xp) {
+    return RANKS.find((r) => r.at > xp) || null;
+  }
+
+  function paintCareer() {
+    const rank = rankFor(career.xp);
+    const next = nextRankFor(career.xp);
+    const floor = rank.at;
+    const span = next ? next.at - floor : 1;
+    const into = next ? Math.min(1, (career.xp - floor) / span) : 1;
+
+    if (el.careerRank) el.careerRank.textContent = rank.name;
+    if (el.careerXp) el.careerXp.textContent = String(Math.round(career.xp));
+    if (el.careerBar) el.careerBar.style.width = `${Math.round(into * 100)}%`;
+    if (el.careerNext) {
+      el.careerNext.textContent = next
+        ? `${Math.round(next.at - career.xp)} xp to ${next.name}`
+        : 'top rank';
+    }
+    if (el.hudRank) el.hudRank.textContent = rank.name;
+  }
+
   /* ------------------------------- shell ------------------------------- */
 
   const el = {
@@ -138,6 +199,24 @@ export function bootApp(options = {}) {
     brakeNotch: $('brakeNotch'),
     messageList: $('messageList'),
     summary: $('overlaySummary'),
+    summaryTitle: $('summaryTitle'),
+    summaryStars: $('summaryStars'),
+    summaryXp: $('summaryXp'),
+    missionText: $('missionText'),
+    missionMeta: $('missionMeta'),
+    missionBar: $('missionBar'),
+    hudRank: $('hudRank'),
+    popupLayer: $('popupLayer'),
+    touchPower: $('touchPower'),
+    touchBrake: $('touchBrake'),
+    touchHorn: $('touchHorn'),
+    touchDoors: $('touchDoors'),
+    careerChip: $('careerChip'),
+    careerRank: $('careerRank'),
+    careerXp: $('careerXp'),
+    careerBar: $('careerBar'),
+    careerNext: $('careerNext'),
+    restartBtn: $('restartBtn'),
     summaryBody: $('summaryBody'),
     summaryNext: $('summaryNext'),
   };
@@ -399,6 +478,9 @@ export function bootApp(options = {}) {
     ui.mode = 'cab';
     ui.orbit = 0.7;
     summaryShown = false;
+    seenMessages = 0;
+    if (el.popupLayer) el.popupLayer.innerHTML = '';
+    if (el.missionText) el.missionText.__set = false;
     show(el.summary, false);
 
     if (el.cityName) el.cityName.textContent = city.city;
@@ -446,6 +528,36 @@ export function bootApp(options = {}) {
       list.appendChild(li);
     }
     el.summaryBody.appendChild(list);
+
+    // ---- grade the run and bank the career progress --------------------
+    const total = Math.max(1, train.stats.stops + train.stats.missed);
+    const ratio = train.stats.stops / total;
+    const stars = ratio >= 0.95 && world.penalties.length === 0 ? 3
+      : ratio >= 0.8 ? 2
+        : ratio >= 0.5 ? 1 : 0;
+    if (el.summaryStars) {
+      el.summaryStars.innerHTML = '';
+      for (let i = 0; i < 3; i++) {
+        const star = document.createElement('i');
+        star.textContent = '★';
+        if (i < stars) star.className = 'on';
+        el.summaryStars.appendChild(star);
+      }
+    }
+    if (el.summaryTitle) {
+      el.summaryTitle.textContent = stars === 3 ? 'A clean run' : stars === 2 ? 'Arrived' : 'Run complete';
+    }
+
+    // a stop is worth XP on top of the score, a penalty costs some
+    const earned = Math.max(0, Math.round(world.score / 10) + train.stats.stops * 8
+      - world.penalties.length * 5);
+    career.xp += earned;
+    career.runs += 1;
+    career.best = Math.max(career.best || 0, Math.round(world.score));
+    store.set('trainDriver.career', career);
+    paintCareer();
+
+    if (el.summaryXp) el.summaryXp.textContent = `+${earned} xp`;
 
     show(el.summary, true);
   }
@@ -537,6 +649,58 @@ export function bootApp(options = {}) {
     }
   }
 
+  /**
+   * Points where you earned them: every new sim message pops up on the right,
+   * with its value in the category colour, then fades.
+   */
+  let seenMessages = 0;
+  function drainMessages() {
+    if (!el.popupLayer || !world) return;
+    const fresh = world.messages.slice(seenMessages);
+    seenMessages = world.messages.length;
+    for (const m of fresh) {
+      if (!m.amount) continue;
+      const pop = document.createElement('div');
+      pop.className = `popup ${m.amount > 0 ? 'good' : 'bad'}`;
+      const value = document.createElement('b');
+      value.textContent = `${m.amount > 0 ? '+' : ''}${Math.round(m.amount)}`;
+      const label = document.createElement('span');
+      label.textContent = m.text;
+      pop.append(value, label);
+      el.popupLayer.appendChild(pop);
+      // the CSS animation fades it out; drop the node once it has finished
+      const life = globalThis.setTimeout || setTimeout;
+      life(() => {
+        if (typeof pop.remove === 'function') pop.remove();
+        else if (el.popupLayer.removeChild) el.popupLayer.removeChild(pop);
+      }, 3100);
+    }
+    // never let the layer grow without bound
+    while (el.popupLayer.children.length > 5) {
+      const oldest = el.popupLayer.firstElementChild || el.popupLayer.children[0];
+      if (!oldest) break;
+      if (el.popupLayer.removeChild) el.popupLayer.removeChild(oldest);
+      else break;
+    }
+  }
+
+  function updateMission() {
+    const train = playerTrain(world);
+    const route = train.route.length || 1;
+    const index = Math.max(0, Math.min(route, train.idx));
+    const done = train.dir > 0 ? index : route - index - 1;
+    if (el.missionMeta) el.missionMeta.textContent = `stop ${Math.max(1, done + 1)} / ${route}`;
+    if (el.missionBar) {
+      el.missionBar.style.width = `${Math.max(0, Math.min(100, (done / route) * 100))}%`;
+    }
+    if (el.missionText && !el.missionText.__set) {
+      const last = train.route[train.route.length - 1];
+      el.missionText.textContent = `Run to ${last ? last.name : 'the terminus'} — ${route} stops, `
+        + (world.service.stops === 'majors' ? 'principal stations only' : 'every station');
+      el.missionText.__set = true;
+    }
+  }
+
   function updateHud() {
     const train = playerTrain(world);
     const stop = train.route[train.idx] || null;
@@ -555,6 +719,8 @@ export function bootApp(options = {}) {
     if (el.brakeNotch) el.brakeNotch.textContent = String(controls.brakeNotch);
     if (el.camName) el.camName.textContent = CAMERA_LABELS[ui.mode] || ui.mode;
     updateLineMap();
+    updateMission();
+    drainMessages();
 
     if (stop) {
       const d = Math.abs(stationDistance(train, stop));
@@ -837,6 +1003,63 @@ export function bootApp(options = {}) {
   }
 
   if (el.resumeBtn) el.resumeBtn.addEventListener('click', togglePause);
+  if (el.restartBtn) {
+    el.restartBtn.addEventListener('click', () => {
+      show(el.overlayPause, false);
+      startCity(world ? world.city.id : pendingCity, serviceId);
+    });
+  }
+
+  // ---- thumb controls: the same levers, sized for a phone ---------------
+  function holdControl(node, onDown, onUp) {
+    if (!node || !node.addEventListener) return;
+    const down = (event) => {
+      event.preventDefault?.();
+      node.classList.add('held');
+      onDown();
+    };
+    const up = () => {
+      node.classList.remove('held');
+      onUp?.();
+    };
+    node.addEventListener('pointerdown', down);
+    node.addEventListener('pointerup', up);
+    node.addEventListener('pointercancel', up);
+    node.addEventListener('pointerleave', up);
+  }
+
+  let touchPowerT = null;
+  let touchBrakeT = null;
+  holdControl(
+    el.touchPower,
+    () => {
+      if (!world) return;
+      notchPower(1);
+      // hold to keep notching up, one step at a time
+      touchPowerT = (globalThis.setInterval || setInterval)(() => notchPower(1), 320);
+    },
+    () => {
+      if (touchPowerT) (globalThis.clearInterval || clearInterval)(touchPowerT);
+      touchPowerT = null;
+    },
+  );
+  holdControl(
+    el.touchBrake,
+    () => {
+      if (!world) return;
+      notchBrake(1);
+      touchBrakeT = (globalThis.setInterval || setInterval)(() => notchBrake(1), 320);
+    },
+    () => {
+      if (touchBrakeT) (globalThis.clearInterval || clearInterval)(touchBrakeT);
+      touchBrakeT = null;
+    },
+  );
+  holdControl(el.touchHorn, () => world && horn(true), () => world && horn(false));
+  holdControl(el.touchDoors, () => {
+    if (!world) return;
+    if (!toggleDoors(world, playerTrain(world))) pushTicker('doors interlocked — stop at a platform first', 'bad', 2.5);
+  });
   if (el.cityBtn) el.cityBtn.addEventListener('click', backToTitle);
   if (el.summaryNext) {
     el.summaryNext.addEventListener('click', () => {
@@ -880,6 +1103,7 @@ export function bootApp(options = {}) {
   const api = {
     start, startCity, backToTitle, tick, updateHud, togglePause, cycleCamera, stop: detach,
     showLines, showServices, get menuStep() { return menuStep; },
+    career, rankFor, RANKS,
     rendererError,
     ui, controls, keys, camera, renderer,
     get world() { return world; },
@@ -890,6 +1114,7 @@ export function bootApp(options = {}) {
 
   // the menu comes first: it must exist even if the scene below cannot render
   renderCityCards();
+  paintCareer();
 
   // build a city straight away so the title card sits over a live scene, but
   // hold the simulation until the player picks a line

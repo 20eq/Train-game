@@ -45,11 +45,11 @@ export const CITIES = [
     tagline: 'Three lines, twelve-car locals, the Arabian Sea on the right',
     blurb: 'Western, Central and Harbour. 12-car rakes with blue doors, packed platforms, and a 100 km/h run to Virar.',
     seed: 7,
-    palette: {
-      skyTop: '#5d9ec7', skyLow: '#e8e2cb', fog: '#d9dfd8', sun: '#fff2cf',
-      ground: ['#8fa26a', '#9cae74', '#83975f', '#a8b781'],
-      ballast: '#8b8377', sleepers: '#5c564c', rail: '#b9bcb8',
-      platform: '#d8cfb8', building: '#c2a88a', roof: '#a97560',
+        palette: {
+      skyTop: '#3f6d92', skyLow: '#b9c3bd', fog: '#aab5ae', sun: '#f6ecd4',
+      ground: ['#6b7549', '#77805a', '#5f6a42', '#828a63'],
+      ballast: '#6f6a60', sleepers: '#4a453d', rail: '#9aa0a0',
+      platform: '#b7ae99', building: '#9c8570', roof: '#7d5c50',
     },
     lines: [
       {
@@ -121,11 +121,11 @@ export const CITIES = [
     tagline: 'The loop, the Gurgaon road and the Ghaziabad run',
     blurb: 'Red-banded rakes, wide open flats, hazy afternoons and a 20-coach Rajdhani.',
     seed: 23,
-    palette: {
-      skyTop: '#7ba7c9', skyLow: '#f0e2c2', fog: '#e2dcc8', sun: '#fff0c8',
-      ground: ['#b5a878', '#c0b184', '#a89c6e', '#c8b98f'],
-      ballast: '#94897a', sleepers: '#5a5449', rail: '#c3c4bd',
-      platform: '#ded5c0', building: '#cbb695', roof: '#a5846a',
+        palette: {
+      skyTop: '#7593aa', skyLow: '#cfc6ad', fog: '#c4bda8', sun: '#f4e9cd',
+      ground: ['#8b8158', '#968b63', '#7d7450', '#a2966f'],
+      ballast: '#7d7264', sleepers: '#4d473e', rail: '#a8a9a2',
+      platform: '#c3b79d', building: '#b09a7c', roof: '#8a6f58',
     },
     lines: [
       {
@@ -190,11 +190,11 @@ export const CITIES = [
     tagline: 'The circular line, the Hooghly bank and the Sealdah locals',
     blurb: 'White and blue rakes, wet platforms, and the riverside curve into Ballygunge.',
     seed: 41,
-    palette: {
-      skyTop: '#6fa3bf', skyLow: '#e4e6cf', fog: '#d6ded6', sun: '#fdf0cd',
-      ground: ['#7f9a63', '#8ea96f', '#73905a', '#9db47c'],
-      ballast: '#867f74', sleepers: '#555046', rail: '#b6b9b4',
-      platform: '#d5cdb9', building: '#c6ac8d', roof: '#96807a',
+        palette: {
+      skyTop: '#557f96', skyLow: '#c2c7b4', fog: '#b6bdb0', sun: '#f4ecd2',
+      ground: ['#5c6d45', '#68794f', '#525f3c', '#748458'],
+      ballast: '#6d675d', sleepers: '#474238', rail: '#9ba09b',
+      platform: '#b6ad99', building: '#a68d74', roof: '#7f6b64',
     },
     lines: [
       {
@@ -259,11 +259,11 @@ export const CITIES = [
     tagline: 'Beach to Tambaram, the MRTS and the north line to Tiruvallur',
     blurb: 'Green-banded rakes, hot rails, and a long run down the Coromandel coast.',
     seed: 88,
-    palette: {
-      skyTop: '#5aa6c9', skyLow: '#f5e7c6', fog: '#dfe4d6', sun: '#fff4d2',
-      ground: ['#9aa86a', '#a6b276', '#8d9c5e', '#b3be86'],
-      ballast: '#928778', sleepers: '#5d564a', rail: '#c0c2bb',
-      platform: '#dbd2ba', building: '#c8b18f', roof: '#a8836a',
+        palette: {
+      skyTop: '#53889f', skyLow: '#d3c9a8', fog: '#c5c4ab', sun: '#f8eed0',
+      ground: ['#7a8453', '#858f5c', '#6d774a', '#949d6c'],
+      ballast: '#7b7164', sleepers: '#4c463b', rail: '#a3a59f',
+      platform: '#c0b59c', building: '#ab9678', roof: '#8c6f58',
     },
     lines: [
       {

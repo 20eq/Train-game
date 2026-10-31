@@ -257,6 +257,53 @@ test('the line map draws the whole route, your train and the traffic', () => {
   assert.ok(me.style.left.endsWith('%'));
 });
 
+test('a stop pops its points up on screen, then clears', () => {
+  app.startCity('mumbai', 'local');
+  const layer = env.elements.get('popupLayer');
+  assert.equal(layer.children.length, 0, 'a fresh run starts with a clean popup layer');
+
+  const train = app.world.trains.find((t) => t.id === app.world.playerId);
+  // coast in on the next stop and let the sim grade the stop
+  train.state = 'run';
+  train.dwell = 0;
+  train.idx = Math.min(1, train.route.length - 1);
+  const stop = train.route[train.idx];
+  train.s = stop.s - 2;
+  train.v = 0.4;
+  step(30);
+
+  assert.ok(layer.children.length > 0, 'a completed stop should pop its score');
+  const pop = layer.children[0];
+  assert.match(pop.className, /popup/);
+  assert.match(pop.className, /good/, 'a stop is a good thing');
+  assert.match(pop.children[0].textContent, /^\+\d+$/, 'with the points it was worth');
+  assert.ok(pop.children[1].textContent.length > 0, 'and what earned them');
+});
+
+test('the mission card tracks the run and the career banks it', () => {
+  app.startCity('mumbai', 'local');
+  const meta = env.elements.get('missionMeta');
+  assert.match(meta.textContent, /^stop \d+ \/ \d+$/, 'the mission says which stop you are on');
+  assert.match(env.elements.get('missionText').textContent, /^Run to .+ — \d+ stops/);
+
+  const before = Number(env.elements.get('careerXp').textContent);
+  const train = app.world.trains.find((t) => t.id === app.world.playerId);
+  train.stats.stops = 6;
+  train.stats.missed = 0;
+  app.world.score = 900;
+  train.stats.delivered = 400;
+  app.world.finished = true;
+  step(30);
+
+  const after = Number(env.elements.get('careerXp').textContent);
+  assert.ok(after > before, `xp should grow with a finished run (${before} -> ${after})`);
+  assert.ok(app.career.xp >= after, 'and it is the career total');
+  const stars = env.elements.get('summaryStars').children;
+  assert.equal(stars.length, 3, 'three stars on the board');
+  assert.ok(stars.every((st) => st.className === 'on'), 'a clean run earns all of them');
+  assert.match(env.elements.get('summaryXp').textContent, /^\+\d+ xp$/);
+});
+
 test('the picker survives a browser without WebGL', () => {
   app.startCity('mumbai', 'express');
   const broken = bootApp({

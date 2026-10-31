@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1112" />
   <title>Train Driver — Indian Locals</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -10,24 +11,36 @@
   <canvas id="scene"></canvas>
 
   <main id="hud" class="hidden">
-    <header class="topbar">
-      <div class="place">
+    <!-- the mission: who you are, what you are driving, how far is left -->
+    <section class="mission" id="missionCard">
+      <div class="mission-head">
         <span class="eyebrow" id="cityName">Mumbai</span>
-        <strong class="line" id="lineName">Western Line</strong>
-        <span class="service" id="serviceName">Mumbai Rajdhani</span>
-      </div>
-      <div class="status">
         <span class="clock" id="clock">06:00</span>
-        <span class="score" id="scoreValue">0</span>
       </div>
-      <div class="nextstop">
-        <span class="eyebrow">next stop</span>
-        <strong id="nextName">Churchgate</strong>
-        <span class="dist" id="nextDist">—</span>
-        <span class="zone" id="stopZone"><i></i>green zone 18 m</span>
-        <ol class="stops" id="stopList"></ol>
+      <strong class="mission-line" id="lineName">Western Line</strong>
+      <span class="mission-service" id="serviceName">Western Line Local</span>
+
+      <p class="mission-goal" id="missionText">Run the line from end to end</p>
+
+      <div class="mission-progress">
+        <div class="bar"><i id="missionBar"></i></div>
+        <span class="mission-meta" id="missionMeta">stop 1 / 21</span>
       </div>
-    </header>
+
+      <div class="mission-foot">
+        <span class="rank-chip" id="hudRank">Trainee</span>
+        <span class="mission-score"><b id="scoreValue">0</b> pts</span>
+      </div>
+    </section>
+
+    <!-- next station, the board you have to hit -->
+    <section class="nextstop">
+      <span class="eyebrow">next stop</span>
+      <strong id="nextName">Churchgate</strong>
+      <span class="dist" id="nextDist">—</span>
+      <span class="zone" id="stopZone"><i></i>green zone 18 m</span>
+      <ol class="stops" id="stopList"></ol>
+    </section>
 
     <section class="linemap" id="lineMap" aria-label="line map">
       <div class="maptop">
@@ -77,6 +90,18 @@
     </footer>
 
     <ul class="messages" id="messageList"></ul>
+
+    <!-- points, exactly where you earned them -->
+    <div class="popups" id="popupLayer" aria-live="polite"></div>
+
+    <!-- thumb controls, for a phone held sideways -->
+    <div class="touchdock" id="touchDock">
+      <button class="tbtn small" type="button" id="touchHorn">HORN</button>
+      <button class="tbtn small" type="button" id="touchDoors">DOORS</button>
+      <button class="tbtn brake" type="button" id="touchBrake"><em>BRAKE</em></button>
+      <button class="tbtn power" type="button" id="touchPower"><em>POWER</em></button>
+    </div>
+
     <div class="ticker" id="ticker"></div>
   </main>
 
@@ -85,14 +110,25 @@
       <p class="studio">Indian Locals · Four Cities of Track</p>
       <h1>TRAIN DRIVER</h1>
       <p class="lede">
-        Every city runs three real lines. Pick the city, then pick your train:
-        a suburban local, a loco-hauled passenger, or a long express — each
-        with its own stock, its own stops and its own place in the timetable.
+        Every city runs three real lines. Pick the city, the line, and the train
+        — a suburban local, a loco-hauled passenger, or a long express.
       </p>
+
+      <div class="career" id="careerChip">
+        <div class="career-left">
+          <span class="eyebrow">career</span>
+          <strong id="careerRank">Trainee</strong>
+        </div>
+        <div class="career-bar"><i id="careerBar"></i></div>
+        <div class="career-right">
+          <b id="careerXp">0</b>
+          <span class="eyebrow" id="careerNext">xp</span>
+        </div>
+      </div>
 
       <div class="cities" id="cityCards"></div>
 
-      <p class="hint">Click a line, or press 1 – 4 · then choose your train</p>
+      <p class="hint">Click a city, or press 1 – 4 · then the line, then your train</p>
     </div>
   </div>
 
@@ -101,8 +137,13 @@
   <div class="overlay hidden" id="overlaySummary">
     <div class="card">
       <p class="studio">End of the run</p>
-      <h2>Arrived</h2>
+      <h2 id="summaryTitle">Arrived</h2>
+      <div class="stars" id="summaryStars"></div>
       <div id="summaryBody"></div>
+      <div class="award" id="summaryAward">
+        <span class="eyebrow">experience</span>
+        <strong id="summaryXp">+0 xp</strong>
+      </div>
       <div class="buttons">
         <button class="primary" type="button" id="summaryNext">Take another service</button>
       </div>
@@ -114,9 +155,10 @@
       <p class="studio">Intermission</p>
       <h2>Held at the signal</h2>
       <p class="lede" id="pauseStats">—</p>
-      <div class="buttons">
-        <button class="primary" type="button" id="resumeBtn">Back to the cab</button>
-        <button class="ghost" type="button" id="titleBtn">Change city</button>
+      <div class="menu">
+        <button class="menu-item" type="button" id="resumeBtn"><b>Resume</b><span>back to the cab</span></button>
+        <button class="menu-item" type="button" id="restartBtn"><b>Restart run</b><span>from the first station</span></button>
+        <button class="menu-item" type="button" id="titleBtn"><b>Change line</b><span>keep your career, pick another route</span></button>
       </div>
       <p class="hint">P or Esc to resume</p>
     </div>
