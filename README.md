@@ -1,8 +1,22 @@
 # भारत रेल सिम · Bharat Rail Sim
 
-A browser-based **Indian Railways train simulator** built with pure HTML5 Canvas + WebAudio — no engine, no assets, everything is procedurally drawn and synthesised.
+A browser-based **Indian Railways train simulator** — two ways to play:
 
-## Routes (9 lines, 10 services)
+## 🛰️ Open World (3D) — `open-world.html`
+True-3D regions built with Three.js (vendored, no CDN). Design ideas borrowed from the best in the genre: cab immersion from **Train Sim World**, free-roam + free camera from **Trainz**, sandbox vibe from **Derail Valley**, Indian roster & station culture from **Indian Train Simulator**, physics discipline from **OpenRails**.
+
+- Winding 3D alignments over procedural terrain — coastlines (Mumbai, Konkan), the Hooghly, tea hills, the Bhor Ghat, windmill plains
+- Tunnels with portals, viaducts with piers over valleys, platforms, canopies, catenary, level crossings with animated barriers
+- **4 cameras**: driver's cab (C key), chase, free-orbit drone (drag + wheel), trackside posts
+- **Free roam** on any line — no objectives, just drive the region; or **Service runs** with the full timetable & scoring
+- Day/night with sun/moon/stars, monsoon with rain, lightning and slippery rail, headlamps, station lamps
+- AI traffic: chase trains, passing trains on the far track, single-line loop crossings
+- Same signalling, physics, audio and scoring core as the classic game (shared modules)
+
+## 🎞️ Classic 2D — `classic.html`
+The original side-on driving sim: full timetables, berth scoring, SPAD enforcement, spoken announcements.
+
+## Routes (9 lines, 10 services) — both games
 
 | Route | Line | Traction | Highlights |
 |---|---|---|---|
@@ -50,12 +64,23 @@ Touch buttons for throttle/brake/horn/emergency are on screen for mobile.
 ## Run
 
 ```bash
-npm start          # serves on http://localhost:8080
-npm run qa         # headless autopilot drives every service end-to-end
-npm run shot       # render smoke test across all routes & times of day
+npm start          # serves on http://localhost:8080  (index → launcher)
+npm run qa         # classic: autopilot drives every service end-to-end
+npm run shot       # classic: render smoke test across all routes & times of day
+npm run qa3d       # 3D: world geometry + sim integration tests (headless)
 ```
 
-> `npm start` binds to `0.0.0.0` on purpose so the hosted preview and phones on the same network can reach it. If you're running locally on a shared network and don't want that, change it to `--bind 127.0.0.1`.
+## Controls — 3D
+
+| Key | Action |
+|---|---|
+| `↑`/`↓` | Throttle notch up / down |
+| `←`/`→` | Brake apply / release (power bleeds the brake) |
+| `Space` | Emergency |
+| `C` / `1-4` | Camera: cab · chase · orbit · trackside |
+| drag + wheel | Orbit & zoom (orbit cam) |
+| `H` | Horn · `P` pantograph · `T` time-warp |
+| `Tab` / `M` | Timetable board / route map · `Esc` pause |
 
 ## Scoring
 
