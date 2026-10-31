@@ -65,6 +65,7 @@ function fmtDelay(t) {
   return `+${fmtDur(late)} late`;
 }
 function fmtKm(m) { return (m / KM).toFixed(1) + ' km'; }
+function inRanges(ranges, m) { for (const r of ranges) if (m >= r[0] * KM && m <= r[1] * KM) return true; return false; }
 
 /* Parse "HH:MM" -> seconds */
 function parseClock(s) {
