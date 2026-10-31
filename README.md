@@ -53,11 +53,18 @@ Station coordinates come from the open, OSM-derived [`prasenjit-27/Indian-Railwa
 ## Project layout
 
 ```
-index.html            3D game entry
-js3d/                 world builder (geo paths, terrain), renderer, main loop
-js/                   shared core: physics, signalling, audio, utils
+index.html            game entry (menu, HUD shell)
+src/                  the engine, rebuilt from scratch:
+                        util.js      math, formatting, route queries
+                        signals.js   4-aspect blocks + single-line sections
+                        physics.js   train dynamics + AI drivers
+                        world.js     geo-anchored alignment, terrain, layout
+                        game.js      orchestration, traffic, scoring (headless)
+                        audio.js     procedural WebAudio
+                        render3d.js  three.js renderer
+                        main.js      loop, cameras, input, HUD
 js/data/              routes, trains, themes + geo.js (real station coordinates)
 vendor/               vendored three.js r152 (self-contained, no CDN)
-test/qa3d.js          headless QA: geometry, curvature, sim smoke (meet + timetable)
+test/qa3d.js          headless QA: geometry, physics, signalling, 4 service smokes
 dataref/              open-data reference + final matcher output
 ```
