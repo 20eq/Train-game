@@ -94,6 +94,13 @@ console.log('\n== physics ==');
   for (let i = 0; i < 60 * 120; i++) { rt.throttle = 1; stepTrain(rt, 0.1, {}); }
   if (rt.v <= 8.75) ok(`NMR rack cap respected (${(rt.v * KMH).toFixed(1)} km/h in rack)`);
   else fail(`NMR overspeed in rack: ${(rt.v * KMH).toFixed(1)} km/h`);
+  /* rollaway: doors open on a 1-in-100 downhill must hold */
+  const rr = makeTrain(wr, def, { s0: 20000 });
+  rr.v = 0; rr.doorsOpen = true; rr.brakeCmd = 0;
+  const s0r = rr.s;
+  for (let i = 0; i < 60 * 45; i++) stepTrain(rr, 0.1, {});
+  if (rr.s - s0r < 2) ok(`doors-open parking brake holds (${(rr.s - s0r).toFixed(2)} m drift in 45 s)`);
+  else fail(`rollaway with doors open: drifted ${(rr.s - s0r).toFixed(1)} m`);
   /* monsoon adhesion reduces braking */
   const w1 = makeTrain(wr, def, { s0: 500 }), w2 = makeTrain(wr, def, { s0: 500 });
   w1.v = w2.v = 25; w1.brakeCmd = w2.brakeCmd = 1;

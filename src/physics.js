@@ -33,8 +33,9 @@ function tractiveF(tr) {
 }
 function brakeF(tr) {
   const d = tr.def;
+  const cmd = tr.doorsOpen ? Math.max(tr.brakeCmd, 0.85) : tr.brakeCmd; /* parking brake while dwelling */
   const base = d.brake * tr.mass * 0.9 * tr.wet;
-  return base * tr.brakeCmd;
+  return base * cmd;
 }
 function davisF(tr) {
   const u = Math.abs(tr.v) * KMH;
