@@ -9,8 +9,8 @@ class Game {
   constructor(route, svc, mode) {
     this.route = route;
     this.svc = svc;
-    this.mode = mode || 'service';
-    this.clock = parseClock(svc.depart);
+    this.mode = mode || (svc ? 'service' : 'freeroam');
+    this.clock = svc ? parseClock(svc.depart) : 8 * 3600;
     this.end = routeEnd(route);
     this.box = new SignalBox(route, svc);
     this.wet = 0;                 // monsoon intensity 0..1
@@ -20,7 +20,7 @@ class Game {
     this.tt = svc && this.mode === 'service' ? buildTimetable(route, svc) : [];
     const startStops = svc && svc.stops === 'all'
       ? route.stations.slice(1, -1).map((s) => s.n) : (svc ? svc.stops : []);
-    this.player = makeTrain(route, TRAINS[svc ? svc.train : route.services[0].train], {
+    this.player = makeTrain(route, TRAINS[(svc || route.services[0]).train], {
       s0: 60, stops: this.mode === 'service' ? startStops : [], label: 'You',
     });
     this.cmd = { throttle: 0, brake: 0 };

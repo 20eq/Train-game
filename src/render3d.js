@@ -69,13 +69,66 @@ class R3D {
     const idx = [];
     for (let ix = 0; ix < nx - 1; ix++) for (let iz = 0; iz < nz - 1; iz++) {
       const a = ix * nz + iz, b = a + nz;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
+      idx.push(a, a + 1, b, a + 1, b + 1, b); /* counter-clockwise from above: faces up */
     }
     const tg = new T.BufferGeometry();
     tg.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
     tg.setAttribute('color', new T.Float32BufferAttribute(col, 3));
     tg.setIndex(idx); tg.computeVertexNormals();
     this.world.add(new T.Mesh(tg, new T.MeshLambertMaterial({ vertexColors: true })));
+
+    /* distant skirts: coarse rows of the SAME terrain fn beyond the detailed strip
+       (row 0 = the strip edge, so the seam is seamless by construction) */
+    {
+      const rows = [760, 1250, 1900, 2700, 3600, 4700];
+      const xStep = Math.max(step * 6, 180);
+      const nx2 = Math.floor(path.L / xStep) + 1;
+      const sp = [], sc2 = [], si = [];
+      const base = new T.Color(this.theme.ground), high2 = new T.Color('#857c6c');
+      const hazeC = new T.Color('#aab6ae');
+      const jit = fbm(hashStr(route.id + '-skirt'), 3);
+      const VI = (ix, side, ri) => ix * 2 * rows.length + (side < 0 ? rows.length : 0) + ri; /* matches push order */
+      for (let ix = 0; ix <= nx2; ix++) {
+        const x = Math.min(path.L, ix * xStep);
+        const zi = Math.min(path.N - 1, Math.round(x / path.DS));
+        const zc = path.zs[zi] || 0, yc = path.ys[zi];
+        for (const side of [1, -1]) {
+          for (let ri = 0; ri < rows.length; ri++) {
+            const lat = rows[ri];
+            const h = tf(x, side * lat) + (ri ? jit(x / 900 + side * 3.7 + ri * 11.3) * 15 * ri : 0);
+            sp.push(x, h, zc + side * lat);
+            const c2 = base.clone().lerp(high2, clamp((h - yc) / 160, 0, 0.85));
+            c2.lerp(hazeC, clamp((lat - 760) / 3000, 0, 1) * 0.6);
+            sc2.push(c2.r, c2.g, c2.b);
+          }
+        }
+      }
+      for (let ix = 0; ix < nx2; ix++) {
+        for (const side of [1, -1]) {
+          for (let ri = 0; ri < rows.length - 1; ri++) {
+            const a = VI(ix, side, ri), a2 = VI(ix, side, ri + 1);
+            const b = VI(ix + 1, side, ri), b2 = VI(ix + 1, side, ri + 1);
+            si.push(a, a2, b, a2, b2, b);
+          }
+        }
+      }
+      const sg = new T.BufferGeometry();
+      sg.setAttribute('position', new T.Float32BufferAttribute(sp, 3));
+      sg.setAttribute('color', new T.Float32BufferAttribute(sc2, 3));
+      sg.setIndex(si); sg.computeVertexNormals();
+      this.world.add(new T.Mesh(sg, new T.MeshLambertMaterial({ vertexColors: true })));
+    }
+
+    /* endless under-plane: guarantees land everywhere the strip doesn't reach */
+    {
+      let eMin = Infinity;
+      for (let i = 0; i < path.N; i += 8) eMin = Math.min(eMin, path.ys[i]);
+      const pg = new T.PlaneGeometry(80000, 80000);
+      pg.rotateX(-Math.PI / 2);
+      const pm = new T.Mesh(pg, new T.MeshLambertMaterial({ color: new T.Color('#9aa79a').lerp(new T.Color(this.theme.ground), 0.35) }));
+      pm.position.set(path.L / 2, eMin - 30, 0);
+      this.world.add(pm);
+    }
 
     /* ---------- track ---------- */
     this.world.add(this._ribbon(path, (m) => 0, 3.4, 0.24, this.theme.ballast || '#6d6a63'));   // ballast
@@ -111,7 +164,8 @@ class R3D {
         void main(){ float h = clamp(vp.y/8200.0,0.0,1.0);
         vec3 day = mix(dayBot,dayTop,pow(h,0.6)); vec3 dusk = mix(duskBot,duskTop,pow(h,0.6)); vec3 ni = mix(nightBot,nightTop,pow(h,0.6));
         vec3 c = mix(mix(day,dusk,uDusk),ni,uNight);
-        c = mix(c, vec3(0.015,0.02,0.03), clamp(-vp.y/1200.0,0.0,1.0)); /* below horizon: darken to ground tone */
+        vec3 ground = vec3(0.16,0.17,0.14) * (0.25 + 0.75*day); /* hazy land tone below horizon */
+        c = mix(c, ground, clamp(-vp.y/500.0,0.0,1.0));
         gl_FragColor = vec4(c,1.0); }`,
     });
     this.skyDome = new T.Mesh(geo, m);
@@ -166,7 +220,7 @@ class R3D {
   }
 
   _platform(pf) {
-    const T = THREE, q = WB.posAt(this.p, pf.km * KM, 0);
+    const T = THREE, q = WB.posAt(this.p, pf.km, 0); /* pf.km is metres */
     const g = new T.Group();
     const h = 0.9;
     const slab = new T.Mesh(new T.BoxGeometry(pf.len, h, 7), this.mat('#9a958c'));
@@ -203,7 +257,7 @@ class R3D {
     cv.width = 512; cv.height = 128;
     const ctx = cv.getContext('2d');
     for (const pf of platforms) {
-      const q = WB.posAt(path, pf.km * KM, 11);
+      const q = WB.posAt(path, pf.km, 11); /* metres */
       ctx.clearRect(0, 0, 512, 128);
       ctx.fillStyle = '#11304f'; ctx.fillRect(0, 0, 512, 128);
       ctx.fillStyle = '#fff'; ctx.font = 'bold 54px sans-serif'; ctx.textAlign = 'center';
@@ -506,6 +560,11 @@ class R3D {
     this._rainAmt = rain;
   }
   animateRain(dt, camPos) {
+    /* keep the sky dome & stars centred on the camera (routes run far from origin) */
+    if (this.skyDome) this.skyDome.position.set(camPos.x, 0, camPos.z);
+    if (this._stars) this._stars.position.set(camPos.x, 0, camPos.z);
+    /* fog distance tracks rain even after it clears */
+    this.scene.fog.far = 7000 - 4300 * (this._rainAmt || 0);
     if (!this._rain || !this._rain.visible) return;
     const p = this._rain.geometry.attributes.position;
     const fall = 42 * dt;
@@ -516,7 +575,6 @@ class R3D {
     }
     p.needsUpdate = true;
     this._rain.position.set(camPos.x, camPos.y - 10, camPos.z);
-    this.scene.fog.far = 7000 - 4300 * (this._rainAmt || 0);
   }
 
   render(camera) { this.renderer.render(this.scene, camera || this.camera); }

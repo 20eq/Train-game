@@ -48,7 +48,7 @@ Station coordinates come from the open, OSM-derived [`prasenjit-27/Indian-Railwa
 
 ## Controls
 
-`↑↓` throttle · `←→` brake · `Space` emergency · `H` horn · `C` / `1-4` cameras · drag orbit · wheel zoom · `T` time warp · `Tab` station board · `M` map · `P` pantograph · `Esc` pause
+`↑↓` throttle · `←→` brake · `Space` emergency · `H` horn · `C` / `1-4` cameras · drag orbit · wheel zoom · `B` auto-driver · `T` time warp · `N` night · `P` monsoon · `Tab` station board · `M` map · `Esc` pause
 
 ## Project layout
 

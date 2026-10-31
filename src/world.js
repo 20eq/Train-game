@@ -85,9 +85,10 @@ const WB = {
   posAt(p, m, zOff) {
     m = clamp(m, 0, p.L);
     const f = m / p.DS, i = Math.min(p.N - 2, Math.floor(f)), t = f - i;
+    const tx = lerp(p.tx[i], p.tx[i + 1], t), tz = lerp(p.tz[i], p.tz[i + 1], t);
     return {
       x: m, y: lerp(p.ys[i], p.ys[i + 1], t), z: lerp(p.zs[i], p.zs[i + 1], t) + (zOff || 0),
-      tx: lerp(p.tx[i], p.tx[i + 1], t), ty: lerp(p.ty[i], p.ty[i + 1], t), tz: lerp(p.tz[i], p.tz[i + 1], t),
+      tx, ty: lerp(p.ty[i], p.ty[i + 1], t), tz, yaw: Math.atan2(tz, tx),
     };
   },
 
@@ -126,7 +127,7 @@ const WB = {
   layout(route, p, svc) {
     const out = { platforms: [], loops: [], tunnels: [], viaducts: [], crossings: [], poles: [], posts: [], props: [], milestones: [] };
     for (const st of route.stations) {
-      out.platforms.push({ km: st.km, len: Math.min(st.plat || 250, 280), n: st.n, loc: st.loc, y: this.posAt(p, st.km * KM, 0).y });
+      out.platforms.push({ km: st.km, len: Math.min(st.plat || 250, 280), n: st.n, loc: st.loc, y: this.posAt(p, st.km, 0).y });
     }
     for (const tu of route.tunnels || []) out.tunnels.push({ a: tu[0] * KM, b: tu[1] * KM });
     for (const vd of route.viaducts || []) out.viaducts.push({ a: vd[0] * KM, b: vd[1] * KM });

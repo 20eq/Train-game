@@ -206,7 +206,7 @@ const ROUTES = {
   /* ------------------------------------------------ Nilgiri Mountain Railway */
   nilgiri: {
     id: 'nilgiri', title: 'Nilgiri Mountain Railway', sub: 'Mettupalayam → Ooty', city: 'Nilgiris', theme: 'nilgiri',
-    cat: 'Heritage scenic', badge: 'Steam', double: false, electrified: false, rack: true, km: 46, block: 0, elev0: 330,
+    cat: 'Heritage scenic', badge: 'Steam', double: false, electrified: false, rack: true, rackSpans: [[9.7, 31]], km: 46, block: 0, elev0: 330,
     stationLimit: 25, annLang: 'ta',
     stations: [
       st('Mettupalayam', 'மேட்டுப்பாளையம்', 0, { term: true, plat: 120 }), st('Kallar', 'கல்லர்', 8, { plat: 80 }),

@@ -725,10 +725,10 @@
    {
     "n": "Tambaram",
     "code": "TBMS",
-    "lat": 12.93798,
-    "lon": 80.13161,
+    "lat": 12.9249,
+    "lon": 80.1166,
     "src": "dataset",
-    "km": 29.24,
+    "km": 30.9,
     "elev": 14,
     "loc": ""
    }
@@ -980,8 +980,8 @@
    {
     "n": "Mysuru Jn",
     "code": "?",
-    "lat": 12.38024,
-    "lon": 76.65108,
+    "lat": 12.2953,
+    "lon": 76.6386,
     "src": "interp",
     "km": 0.0,
     "elev": 763,
@@ -990,50 +990,50 @@
    {
     "n": "Naganahalli",
     "code": "NHY",
-    "lat": 12.38024,
-    "lon": 76.65108,
+    "lat": 12.289,
+    "lon": 76.6014,
     "src": "dataset",
-    "km": 0.0,
-    "elev": 768,
+    "km": 8.7,
+    "elev": 765,
     "loc": ""
    },
    {
     "n": "Kadakola",
     "code": "KDO",
-    "lat": 12.19041,
-    "lon": 76.66373,
+    "lat": 12.247,
+    "lon": 76.5854,
     "src": "dataset",
-    "km": 22.42,
-    "elev": 772,
+    "km": 14.8,
+    "elev": 767,
     "loc": ""
    },
    {
     "n": "Nanjangud Town",
     "code": "NTW",
-    "lat": 12.12211,
-    "lon": 76.68443,
+    "lat": 12.1523,
+    "lon": 76.4443,
     "src": "dataset",
-    "km": 30.82,
-    "elev": 780,
+    "km": 25.9,
+    "elev": 770,
     "loc": ""
    },
    {
     "n": "Sujathapuram",
     "code": "—",
-    "lat": 12.13,
-    "lon": 76.693,
+    "lat": 12.1111,
+    "lon": 76.412,
     "src": "manual",
-    "km": 32.17,
-    "elev": 792,
+    "km": 31.4,
+    "elev": 772,
     "loc": ""
    },
    {
     "n": "Chamarajanagar",
     "code": "CMNR",
-    "lat": 11.93489,
-    "lon": 76.93281,
+    "lat": 11.96,
+    "lon": 76.7,
     "src": "dataset",
-    "km": 68.13,
+    "km": 61.0,
     "elev": 812,
     "loc": ""
    }
@@ -1174,7 +1174,7 @@
     "lon": 76.823,
     "src": "manual",
     "km": 15.33,
-    "elev": 640,
+    "elev": 585,
     "loc": ""
    },
    {
@@ -1184,7 +1184,7 @@
     "lon": 76.8,
     "src": "manual",
     "km": 20.54,
-    "elev": 950,
+    "elev": 870,
     "loc": ""
    },
    {
@@ -1194,7 +1194,7 @@
     "lon": 76.789,
     "src": "manual",
     "km": 22.62,
-    "elev": 1250,
+    "elev": 1075,
     "loc": ""
    },
    {
@@ -1204,7 +1204,7 @@
     "lon": 76.79,
     "src": "manual",
     "km": 23.22,
-    "elev": 1350,
+    "elev": 1118,
     "loc": ""
    },
    {
@@ -1224,7 +1224,7 @@
     "lon": 76.78608,
     "src": "dataset",
     "km": 32.53,
-    "elev": 1850,
+    "elev": 1560,
     "loc": ""
    },
    {
@@ -1234,7 +1234,7 @@
     "lon": 76.7692,
     "src": "dataset",
     "km": 34.52,
-    "elev": 1865,
+    "elev": 1640,
     "loc": ""
    },
    {
@@ -1244,7 +1244,7 @@
     "lon": 76.73691,
     "src": "dataset",
     "km": 39.08,
-    "elev": 1905,
+    "elev": 1745,
     "loc": ""
    },
    {
@@ -1254,7 +1254,7 @@
     "lon": 76.70428,
     "src": "dataset",
     "km": 42.85,
-    "elev": 1885,
+    "elev": 1855,
     "loc": ""
    },
    {

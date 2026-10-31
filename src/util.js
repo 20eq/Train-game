@@ -67,7 +67,8 @@ function fmtKm(m) { return (m / KM).toFixed(1) + ' km'; }
 /* ---------- route geometry queries (route is plain data) ---------- */
 function routeEnd(route) { return route.km * KM; }
 function gradeAt(route, m) {
-  for (const g of route.gradients || []) if (m >= g[0] * KM && m <= g[1] * KM) return g[2] / 1000;
+  /* routes.js stores gradients as rise-per-metre (e.g. 0.025 = 2.5%) */
+  for (const g of route.gradients || []) if (m >= g[0] * KM && m <= g[1] * KM) return g[2];
   return 0;
 }
 function elevAt(route, m) {

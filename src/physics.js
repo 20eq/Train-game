@@ -55,7 +55,9 @@ function stepTrain(tr, dt, ctx) {
   /* rack sections: grip is positive — full brake authority, low cap */
   const onRack = (r.rackSpans || []).some((sp) => tr.s >= sp[0] * KM && tr.s <= sp[1] * KM);
   if (onRack) {
-    F = tractiveF(tr) * 0.8 - davisF(tr) - gradeForce(tr) - (tr.brakeCmd > 0 ? tr.mass * G * Math.abs(tr.grade) * Math.min(tr.brakeCmd * 1.6, 1) * sign(-tr.grade || -1) * 0 : 0);
+    /* rack rail carries part of the train: cog boost + holding brake */
+    const cap = Math.min(d.fMax, d.power / Math.max(tr.v, 1.5));
+    F = cap * 1.55 * tr.throttle - davisF(tr) - gradeForce(tr);
     if (tr.brakeCmd > 0.2 && tr.v > 0) F -= tr.mass * G * 0.06; /* rack retainer */
   }
   const aT = clamp(F / tr.mass, -1.8, d.cls === 'EMU' ? 1.15 : 0.65);

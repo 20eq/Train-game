@@ -15,8 +15,10 @@ jobs:
         id: guard
         env:
           ZCID: ${{ secrets.ZENCODER_CLIENT_ID }}
+          ZCSECRET: ${{ secrets.ZENCODER_CLIENT_SECRET }}
         run: |
-          if [ -z "$ZCID" ]; then
+          # note: secrets are not shared with pull requests from forks
+          if [ -z "$ZCID" ] || [ -z "$ZCSECRET" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Zencoder review skipped - add ZENCODER_CLIENT_ID and ZENCODER_CLIENT_SECRET repo secrets (from your zencoder.ai account) to enable."
           fi

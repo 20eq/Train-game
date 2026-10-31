@@ -216,6 +216,31 @@ function smoke(routeId, svcIdx, maxSimS) {
   else fail(`interactive drive broken: stops=${g.score.total}, door cycles=${opens} @km ${(g.player.s / KM).toFixed(1)}`);
 }
 
+/* free roam must construct & run without a service (regression: svc null crash) */
+{
+  const r = ROUTES.mys;
+  const g = new Game(r, null, 'freeroam');
+  g.cmd.throttle = 1;
+  for (let i = 0; i < 60 * 10; i++) g.advance(0.5);
+  if (!g.done && g.player.s > 3000 && isFinite(g.player.v)) ok(`free roam runs (km ${(g.player.s / KM).toFixed(1)} after 10 sim-min)`);
+  else fail(`free roam broken: done=${g.done} s=${g.player.s}`);
+}
+
+/* Nilgiri rack climb: X-class must make the 1-in-12-ish grades with cog assist */
+{
+  const nr = ROUTES.nilgiri;
+  const tr = makeTrain(nr, TRAINS.nmr_x, { s0: 8 * KM });
+  let worst = 0;
+  for (let i = 0; i < 60 * 60 * 25; i++) {
+    tr.throttle = 1;
+    stepTrain(tr, 0.1, {});
+    worst = Math.max(worst, gradeAt(nr, tr.s));
+    if (tr.done) break;
+  }
+  if (tr.s > 25 * KM) ok(`NMR climbs with real grades (past km ${(tr.s / KM).toFixed(1)}, worst uphill ${(worst * 100).toFixed(1)}%)`);
+  else fail(`NMR stalls on real grades at km ${(tr.s / KM).toFixed(1)} (worst ${(worst * 100).toFixed(1)}%)`);
+}
+
 smoke('mys', 0, 5200);           // single-line loop meet
 smoke('konkan', 0, 12000);        // long single-line + tunnels
 smoke('wr', 0, 5400);            // double line, chase + oncoming
