@@ -1,0 +1,13 @@
+{
+  "name": "bharat-rail-sim",
+  "version": "1.0.0",
+  "description": "3D Indian Railways train simulator on real geography - 9 regions, real station coordinates, elevations and distances (OSM-derived open data)",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080 --bind 0.0.0.0",
+    "qa": "node test/qa3d.js"
+  },
+  "dependencies": {
+    "three": "^0.152.2"
+  }
+}

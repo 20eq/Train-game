@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bharat Rail Sim 3D — drive real Indian rail geography</title>
+<style>
+  :root { --bg:#0b0f16; --panel:#121a26; --edge:#243244; --ink:#e8edf4; --dim:#8fa0b4; --amber:#ffb454; --green:#3ad96e; --red:#ff5340; }
+  * { box-sizing:border-box; margin:0; }
+  html,body { height:100%; background:var(--bg); color:var(--ink); font:15px/1.45 'Segoe UI',system-ui,sans-serif; overflow:hidden; }
+  #gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  /* ---------- menu ---------- */
+  #menu { position:fixed; inset:0; overflow:auto; background:linear-gradient(160deg,#0d1420 0%,#101b2a 55%,#0c2231 100%); padding:34px 5vw; z-index:10; }
+  #menu h1 { font-size:34px; letter-spacing:.5px; } #menu h1 b { color:var(--amber); }
+  #menu p.sub { color:var(--dim); margin:6px 0 26px; max-width:760px; }
+  .route { background:var(--panel); border:1px solid var(--edge); border-radius:14px; padding:16px 18px; margin-bottom:14px; }
+  .rhead b { font-size:17px; } .rhead span { display:block; color:var(--dim); font-size:13px; margin-top:2px; }
+  .svcs { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .svcs button { background:#1a2739; color:var(--ink); border:1px solid #2c405a; border-radius:9px; padding:8px 14px; cursor:pointer; font-size:13.5px; }
+  .svcs button:hover { background:#24374f; border-color:var(--amber); }
+  .svcs button.free { background:transparent; color:var(--amber); border-color:#3a4a5e; }
+  .svcs small { color:var(--dim); margin-left:6px; }
+  /* ---------- HUD ---------- */
+  #hud { position:fixed; inset:0; display:none; pointer-events:none; z-index:5; }
+  #hud .panel { position:absolute; background:rgba(10,15,23,.78); border:1px solid var(--edge); border-radius:12px; padding:10px 14px; }
+  #hTop { top:14px; left:14px; display:flex; gap:18px; align-items:center; font-family:ui-monospace,monospace; }
+  #hTop .big { font-size:30px; font-weight:700; } #hTop .u { font-size:11px; color:var(--dim); }
+  #hSig { font-size:26px; font-weight:800; min-width:64px; text-align:center; }
+  #hBars { bottom:16px; left:14px; width:230px; }
+  .bar { height:9px; background:#1b2534; border-radius:5px; margin:7px 0 10px; overflow:hidden; }
+  .bar i { display:block; height:100%; border-radius:5px; }
+  #hThrottle i { background:var(--green); width:0; } #hBrake i { background:var(--red); width:0; }
+  #hScore { bottom:16px; right:14px; color:var(--dim); font-size:13px; }
+  #hClock { color:var(--amber); }
+  #toast { position:fixed; top:16px; left:50%; transform:translateX(-50%); background:rgba(12,18,28,.92); border:1px solid var(--edge); border-radius:10px; padding:9px 18px; opacity:0; transition:opacity .4s; font-size:14px; z-index:6; pointer-events:none; }
+  #board,#mapbox { position:fixed; top:64px; right:14px; display:none; background:rgba(10,15,23,.94); border:1px solid var(--edge); border-radius:12px; padding:14px 16px; max-height:74vh; overflow:auto; z-index:6; }
+  #board table { border-collapse:collapse; margin-top:8px; font-size:13px; }
+  #board td,#board th { padding:3px 10px; text-align:left; border-bottom:1px solid #1d2938; }
+  #board th { color:var(--dim); font-weight:600; }
+  #mapcv { display:block; }
+  #pause { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(6,10,16,.6); z-index:8; }
+  #pause .card { background:var(--panel); border:1px solid var(--edge); border-radius:16px; padding:26px 34px; text-align:center; }
+  #pause button { margin-top:14px; background:var(--amber); border:0; color:#1c1408; font-weight:700; border-radius:9px; padding:9px 20px; cursor:pointer; }
+  #help { position:fixed; bottom:16px; right:14px; color:var(--dim); font-size:11.5px; text-align:right; z-index:4; pointer-events:none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="menu">
+  <h1>Bharat Rail Sim <b>3D</b></h1>
+  <p class="sub">Nine real Indian rail regions rebuilt from open station data — true distances, real bends, real climbs. Pick a service or just free-roam. ↑↓ throttle · ←→ brake · Space emergency · C cameras · H horn · T time warp · N night · P monsoon · Tab board · M map · Esc pause</p>
+  <div id="routes">loading routes…</div>
+</div>
+
+<div id="hud">
+  <div class="panel" id="hTop">
+    <div><div class="big" id="hSpeed">0</div><div class="u">km/h · limit <span id="hLimit">–</span></div></div>
+    <div id="hSig">—</div>
+    <div><div class="u">next</div><div id="hNext" style="font-size:15px;font-weight:600">—</div></div>
+    <div><div class="u">time</div><div id="hClock" style="font-size:15px;font-weight:600">09:12</div></div>
+  </div>
+  <div class="panel" id="hBars">
+    <div class="u">throttle</div><div class="bar" id="hThrottle"><i></i></div>
+    <div class="u">brake</div><div class="bar" id="hBrake"><i></i></div>
+  </div>
+  <div class="panel" id="hScore">—</div>
+</div>
+<div id="toast"></div>
+<div id="board"></div>
+<div id="mapbox"><canvas id="mapcv"></canvas></div>
+<div id="pause"></div>
+<div id="help">C cab · 1-4 cameras · drag orbit · wheel zoom</div>
+
+<script src="src/util.js"></script>
+<script src="js/data/trains.js"></script>
+<script src="js/data/themes.js"></script>
+<script src="js/data/geo.js"></script>
+<script src="js/data/routes.js"></script>
+<script src="src/signals.js"></script>
+<script src="src/physics.js"></script>
+<script src="src/world.js"></script>
+<script src="src/game.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/render3d.js"></script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+<script type="module">
+  import * as THREE from 'three';
+  window.THREE = THREE;
+</script>
+<script src="src/main.js"></script>
+</body>
+</html>
