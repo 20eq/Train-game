@@ -1,0 +1,12 @@
+{
+  "name": "bharat-rail-sim",
+  "version": "1.0.0",
+  "description": "Indian Railways train simulator - suburban EMUs, DMUs, MEMUs, expresses and scenic mountain railways",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080 --bind 0.0.0.0",
+    "qa": "node test/qa.js",
+    "shot": "node test/render.js"
+  },
+  "devDependencies": {}
+}
