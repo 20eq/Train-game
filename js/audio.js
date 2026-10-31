@@ -62,7 +62,9 @@ const Snd = {
     this.wind.g.gain.setTargetAtTime(kmh > 55 ? Math.min(0.06, (kmh - 55) / 900) : 0, t, 0.2);
     // rail joints / clatter
     if (kmh > 3 && s.wheelDist !== undefined) {
-      if (s.wheelDist - (this._lastWheel || 0) > 24) { this._lastWheel = s.wheelDist; this.clack(kmh); }
+      const dw = s.wheelDist - (this._lastWheel !== undefined ? this._lastWheel : s.wheelDist);
+      if (dw < 0) this._lastWheel = s.wheelDist; // resync after reset / new train
+      else if (dw > 24) { this._lastWheel = s.wheelDist; this.clack(kmh); }
     }
     // traction sounds
     if (s.sound === 'emu' || s.sound === 'memu') {
@@ -146,34 +148,37 @@ const Snd = {
     this.env(g, t0, 0.012, 0.05 + strength * 0.11, 0.16);
     src.start(t0); src.stop(t0 + 0.3);
   },
-  /* horns */
-  hornStart(type) {
-    if (!this.ready || this._horn) return;
+  /* horns — slot-aware so AI horns never clash with the player's */
+  _hornSlots: {},
+  hornStart(type, slot, vol) {
+    slot = slot || 'player';
+    if (!this.ready || this._hornSlots[slot]) return;
     const c = this.ctx, t0 = c.currentTime, nodes = [], g = c.createGain();
     g.gain.value = 0; g.connect(this.master);
-    const add = (type2, f, vol) => {
+    const add = (type2, f, v) => {
       const o = c.createOscillator(); o.type = type2; o.frequency.value = f;
-      const og = c.createGain(); og.gain.value = vol; o.connect(og); og.connect(g); o.start(); nodes.push(o);
+      const og = c.createGain(); og.gain.value = v; o.connect(og); og.connect(g); o.start(); nodes.push(o);
     };
     if (type === 'emu') { add('sawtooth', 350, 0.4); add('sawtooth', 440, 0.35); add('square', 220, 0.12); }
     else if (type === 'vb') { add('sawtooth', 480, 0.4); add('sawtooth', 600, 0.3); }
     else if (type === 'steam') { add('sine', 620, 0.5); add('sine', 790, 0.4); add('sine', 990, 0.25); }
     else { add('sawtooth', 290, 0.5); add('sawtooth', 345, 0.45); add('square', 145, 0.15); }
-    g.gain.setTargetAtTime(0.16, t0, 0.03);
-    this._horn = { g, nodes };
+    g.gain.setTargetAtTime(vol !== undefined ? vol * 0.16 : 0.16, t0, 0.03);
+    this._hornSlots[slot] = { g, nodes };
   },
-  hornEnd() {
-    if (!this._horn) return;
+  hornEnd(slot) {
+    slot = slot || 'player';
+    const h = this._hornSlots[slot];
+    if (!h) return;
     const t0 = this.ctx.currentTime;
-    this._horn.g.gain.setTargetAtTime(0, t0, 0.06);
-    const h = this._horn; setTimeout(() => h.nodes.forEach((o) => { try { o.stop(); } catch (e) {} }), 400);
-    this._horn = null;
+    h.g.gain.setTargetAtTime(0, t0, 0.06);
+    setTimeout(() => h.nodes.forEach((o) => { try { o.stop(); } catch (e) {} }), 400);
+    delete this._hornSlots[slot];
   },
-  aiHorn(type, vol) { // distant horn
+  aiHorn(type, vol) { // distant horn — own slot + volume, player horn unaffected
     if (!this.ready) return;
-    this.hornStart(type === 'steam' ? 'steam' : 'loco');
-    const self = this;
-    setTimeout(() => self.hornEnd(), 700);
+    this.hornStart(type === 'steam' ? 'steam' : 'loco', 'ai', vol);
+    setTimeout(() => this.hornEnd('ai'), 700);
   },
   doorBeeps(n) {
     if (!this.ready) return;

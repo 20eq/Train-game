@@ -55,6 +55,8 @@ npm run qa         # headless autopilot drives every service end-to-end
 npm run shot       # render smoke test across all routes & times of day
 ```
 
+> `npm start` binds to `0.0.0.0` on purpose so the hosted preview and phones on the same network can reach it. If you're running locally on a shared network and don't want that, change it to `--bind 127.0.0.1`.
+
 ## Scoring
 
 Final grade blends punctuality, berth accuracy, signal discipline (SPADs), speed-limit adherence, smoothness (don't jump the brakes or depart with doors open), and crossing-horn bonus. Best scores are saved locally.

@@ -20,6 +20,7 @@ function makeTrain(defId, opts) {
     crashed: false, despawn: false,
     stopsDone: {}, nextStopIdx: 0,
   };
+  if (t.ai && t.ai.nextStopIdx === undefined) t.ai.nextStopIdx = 0;
   Object.defineProperty(t, 'head', { get() { return t.s; } });
   Object.defineProperty(t, 'rear', { get() { return t.s - t.def.length * t.dir; } });
   return t;
@@ -104,14 +105,16 @@ function aiDrive(t, dt, ctx) {
   }
 
   // determine target points: next planned stop / red signals
-  let targetKm = Infinity, targetSpeed = limit;
+  let targetKm = Infinity, targetSpeed = limit, targetIsStop = false;
   if (ai.pace) targetSpeed = Math.min(targetSpeed, ai.pace * MPS);
   // planned stops
   if (ai.plan && ai.plan.length) {
+    if (ai.nextStopIdx === undefined) ai.nextStopIdx = 0;
     while (ai.nextStopIdx < ai.plan.length && (ai.plan[ai.nextStopIdx].done || ai.plan[ai.nextStopIdx].km < t.s - 50)) ai.nextStopIdx++;
     if (ai.nextStopIdx < ai.plan.length) {
       const p = ai.plan[ai.nextStopIdx];
       targetKm = p.km + 10;
+      targetIsStop = true;
     }
   }
   // signals (same track AI only)
@@ -121,12 +124,10 @@ function aiDrive(t, dt, ctx) {
       const asp = sig.aspect || 'G';
       const d = sig.km - t.s;
       const aspV = ASPECT[asp].speed;
-      if (asp === 'R') { if (d < 1600) targetKm = Math.min(targetKm, sig.km - 15); }
+      if (asp === 'R') { if (d < 1600) { const sigT = sig.km - 15; if (sigT < targetKm) { targetKm = sigT; targetIsStop = false; } } }
       else if (asp === 'Y') targetSpeed = Math.min(targetSpeed, 42 * MPS);
       else if (asp === 'YY') targetSpeed = Math.min(targetSpeed, 68 * MPS);
     }
-    // train ahead on same track
-    const ahead = ctx.sameTrack && ctx.sameTrack !== t ? ctx.sameTrack : null;
   }
   // speed control toward possible stop
   const dTarget = (targetKm === Infinity ? Infinity : (targetKm - t.s) * t.dir);
@@ -138,9 +139,9 @@ function aiDrive(t, dt, ctx) {
   }
   // throttle/brake decision
   const dv = vTarget - t.v;
-  if (t.dwell > 0) { t.throttle = 0; t.brakeCmd = 1; t.dwell -= dt; if (t.dwell <= 0) { t.brakeCmd = 0; if (ai.plan && ai.plan[ai.nextStopIdx]) ai.plan[ai.nextStopIdx].done = true; } return; }
-  if (t.v < 0.15 && dTarget < 40) { // arrived at stop
-    if (ai.plan && ai.nextStopIdx < ai.plan.length && !ai.plan[ai.nextStopIdx].done && dTarget < 40) {
+  if (t.dwell > 0) { t.throttle = 0; t.brakeCmd = 1; t.dwell -= dt; if (t.dwell <= 0) t.brakeCmd = 0; return; }
+  if (t.v < 0.15 && dTarget < 40) { // arrived
+    if (targetIsStop && ai.plan && ai.nextStopIdx < ai.plan.length && !ai.plan[ai.nextStopIdx].done) {
       ai.plan[ai.nextStopIdx].done = true;
       t.dwell = ai.plan[ai.nextStopIdx].dwell || 20;
       t.dwell += (ai.dwellExtra || 0);

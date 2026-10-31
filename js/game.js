@@ -56,7 +56,7 @@ const Game = {
     $('menu').classList.add('hidden');
     const b = $('brief');
     b.classList.remove('hidden');
-    $('briefTitle').textContent = r.title + ' — ' + r.city;
+    $('briefTitle').textContent = this.route.title + ' — ' + this.route.city;
     const svcList = $('svcList');
     svcList.innerHTML = '';
     for (const svc of this.route.services) {
@@ -278,7 +278,9 @@ const Game = {
 
   keydown(e) {
     const k = e.code;
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(k)) e.preventDefault();
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(k)) e.preventDefault();
+    const playing = this.state === 'play' || this.state === 'pause';
+    if (k === 'Tab' && playing) e.preventDefault();
     this.keys[k] = true;
     const p = this.player;
     if (this.state !== 'play' && this.state !== 'pause') {
@@ -454,11 +456,12 @@ const Game = {
     const r = this.route, svc = this.svc;
     const ai = svc.ai && svc.ai.opposite;
     if (!ai) return;
+    // AI traffic: passing trains on the far track
     this.oppTimer -= dt;
     if (this.oppTimer <= 0) {
       this.oppTimer = ai.every[0] + Math.random() * (ai.every[1] - ai.every[0]);
-      const def = ai.trains[(Math.random() * ai.trains.length) | 0];
-      const t = makeTrain(def, { s: r.km * KM + 60, dir: -1, label: 'Passing train', ai: { opposite: true, pace: def.vmax * (0.5 + Math.random() * 0.4) } });
+      const defId = ai.trains[(Math.random() * ai.trains.length) | 0];
+      const t = makeTrain(defId, { s: r.km * KM + 60, dir: -1, label: 'Passing train', ai: { opposite: true, pace: TRAINS[defId].vmax * 3.6 * (0.5 + Math.random() * 0.4) } });
       t.track = 'far';
       t.destText = '—';
       t.rainFactor = this.rainAmt ? 0.85 : 1;
@@ -619,7 +622,8 @@ const Game = {
     const gmax = Math.max(...r.gradients.map(g2 => Math.abs(g2[2])));
     if (gmax > 0.004) {
       HUD.set('elev', String(Math.round(elev)));
-      HUD.set('gradeRow', `Grade 1/${Math.round(1 / Math.abs(gr) || 999)} ${gr > 0.0005 ? '↑ climb' : gr < -0.0005 ? '↓ fall' : '— level'}`);
+      const grTxt = Math.abs(gr) < 0.0005 ? '— level' : `1/${Math.round(1 / Math.abs(gr))} ${gr > 0 ? '↑ climb' : '↓ fall'}`;
+      HUD.set('gradeRow', 'Grade ' + grTxt);
     } else { HUD.set('elev', '—'); HUD.set('gradeRow', r.cat + ' · ' + (r.double ? 'Double line' : 'Single line')); }
   },
 

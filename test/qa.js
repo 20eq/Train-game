@@ -28,7 +28,7 @@ function mkEl(id) {
     classList: { add() {}, remove() {}, contains: (c) => c === 'hidden', toggle() {} },
     _html: '', textContent: '', className: '', value: 'auto',
     set innerHTML(v) { this._html = v; }, get innerHTML() { return this._html; },
-    appendChild() {}, querySelector() { return mkEl(id + '-q'); }, querySelectorAll() { return []; },
+    children: [], appendChild(c) { this.children.push(c); }, querySelector() { return mkEl(id + '-q'); }, querySelectorAll() { return []; },
     addEventListener() {}, getContext: () => mkCtxStub(),
     width: 0, height: 0, onclick: null,
   };
@@ -90,6 +90,20 @@ for (const r of Object.values(ROUTES)) {
 for (const t of Object.values(TRAINS)) {
   if (!(t.mass > 0) || !(t.length > 0) || !isFinite(t.mass)) fail(`train ${t.id} bad mass/length`);
   if (!(t.power > 0) || !(t.fMax > 0)) fail(`train ${t.id} bad performance`);
+}
+
+/* menu flow: openBrief must not throw and must populate the brief screen */
+console.log('\n== Menu flow ==');
+try {
+  for (const r of Object.values(ROUTES)) {
+    Game.openBrief(r.id);
+    if (!els['briefTitle'] || !els['briefTitle'].textContent || !els['briefTitle'].textContent.includes(r.title))
+      fail(`openBrief(${r.id}): briefTitle not set`);
+    if (!(els['svcList'].children || []).some((c) => (c._html || '').includes('startBtn'))) fail(`openBrief(${r.id}): no service buttons`);
+  }
+  ok('openBrief works for all routes (no ReferenceError, buttons rendered)');
+} catch (e) {
+  fail('openBrief threw: ' + e.message);
 }
 
 /* ---------------- autopilot ---------------- */
@@ -157,7 +171,7 @@ async function runService(r, svc) {
     autopilot();
     Game.update(DT, DT);
     t += DT;
-    if (Math.floor(t) % 120 === 0) {
+    if ((t % 120) === 0) {
       if (Math.abs(Game.player.s - lastS) < 4 && Game.player.v < 0.05) stuck++; else stuck = 0;
       if (stuck > 30) {
         const sig = Signals.nextAhead(Game.signals, Game.player.s);

@@ -100,7 +100,7 @@ function drawCarBody(v, c, xC, y, w, h, liv, dark, nl, t, idx, scale) {
   if (kind === 'boxn') { drawBoxn(v, xC, y, w, h, liv, dark, t, scale); return; }
 
   // ---- generic body with windows/doors ----
-  const frontDir = idx === 0 ? 1 : idx === t.def.cars.length - 1 ? -1 : 0;
+  const frontDir = (idx === 0 ? 1 : idx === t.def.cars.length - 1 ? -1 : 0) * t.dir;
   // windows
   const winY = y + h * 0.24, winH = h * 0.26;
   const crowd = clamp(t.passengers / 60, 0, 1);

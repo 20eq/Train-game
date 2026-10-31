@@ -77,8 +77,11 @@ const Gates = {
     for (const g of gates) {
       let near = 1e9, passed = 1e9;
       for (const t of trains) {
-        const d = (g.km - t.head) * t.dir;
-        if (d > 0) near = Math.min(near, d); else passed = Math.min(passed, -d);
+        const dHead = (g.km - t.head) * t.dir;
+        const dRear = (g.km - t.rear) * t.dir;
+        if (dHead > 0) near = Math.min(near, dHead);
+        if (dHead <= 0 && dRear > 0) passed = Math.min(passed, 0); // train spanning: rear not yet clear
+        else if (dRear <= 0) passed = Math.min(passed, -dRear);
       }
       const shouldClose = near < 900 || (g.closed && passed < 250);
       if (shouldClose && !g.closed) { g.closed = 1; g.bell = 1; if (snd) Snd.aiHorn('emu', 0.3); }

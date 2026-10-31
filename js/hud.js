@@ -142,7 +142,7 @@ const Overlays = {
       c.fillStyle = 'rgba(200,120,60,0.12)';
       c.fillRect(kmToX(gr[0] * KM), yMid - 34, kmToX(gr[1] * KM) - kmToX(gr[0] * KM), 68);
       c.fillStyle = 'rgba(230,160,90,0.8)'; c.font = '10px sans-serif'; c.textAlign = 'center';
-      c.fillText(`1/${Math.round(1 / gr[2])}`, (kmToX(gr[0] * KM) + kmToX(gr[1] * KM)) / 2, yMid + 46);
+      c.fillText(`1/${Math.round(1 / Math.abs(gr[2]))}`, (kmToX(gr[0] * KM) + kmToX(gr[1] * KM)) / 2, yMid + 46);
     }
     // main line
     c.strokeStyle = '#5a6675'; c.lineWidth = 3;

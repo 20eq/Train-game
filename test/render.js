@@ -60,7 +60,8 @@ let failures = 0;
 for (const r of Object.values(ROUTES)) {
   for (const svc of r.services) {
     for (const tod of ['auto', 'night', 'dusk', 'dawn']) {
-      Game.start(r.id, svc.id, { tod, weather: tod === 'monsoon' ? 'clear' : (tod === 'night' ? 'monsoon' : 'clear') });
+      for (const weather of ['clear', 'monsoon']) {
+      Game.start(r.id, svc.id, { tod, weather });
       // sample renders along the whole line + around each station
       const spots = [];
       for (let km = 0; km <= r.km; km += r.km / 24) spots.push(km * KM);
@@ -76,13 +77,14 @@ for (const r of Object.values(ROUTES)) {
           drew++;
         } catch (e) {
           failures++;
-          console.log(`  ❌ render ${r.id}/${svc.id} tod=${tod} @${(s / KM).toFixed(1)}km: ${e.message}`);
+          console.log(`  ❌ render ${r.id}/${svc.id} tod=${tod} wx=${weather} @${(s / KM).toFixed(1)}km: ${e.message}`);
           break;
         }
       }
       // results screen render of stats markup
       try { Game.finishRun(); } catch (e) { failures++; console.log(`  ❌ finishRun ${r.id}/${svc.id}: ${e.message}`); }
-      if (drew === spots.length) console.log(`  ✅ ${r.id}/${svc.id} [${tod}] rendered ${drew} views`);
+      if (drew === spots.length) console.log(`  ✅ ${r.id}/${svc.id} [${tod}/${weather}] rendered ${drew} views`);
+      }
     }
   }
 }
