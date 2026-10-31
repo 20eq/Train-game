@@ -112,7 +112,13 @@ class Game {
     if (this.mode !== 'service' || this.done) return;
     const row = this.tt.find((r) => r.halt && !r.actual && Math.abs(r.st.km - this.player.s) < 60);
     if (!row) return;
-    /* aiDrive owns the stop & dwell; we score the arrival when doors open */
+    /* open doors when berthed at the scheduled stop */
+    if (!this.player.doorsOpen && this.player.v < 0.06) {
+      this.player.doorsOpen = true;
+      this.player.dwell = this.svc.dwell || 22;
+      this.events.push({ type: 'doors', state: 'open' });
+    }
+    /* score the arrival when doors open */
     if (this.player.doorsOpen) {
       row.actual = Math.round(this.clock);
       row.delay = row.actual - row.arr;
@@ -140,6 +146,15 @@ class Game {
     /* AI trains that reached the terminus clear the section (platform/siding) */
     for (const tr of this.trains) if (tr !== this.player && tr.done && tr.s >= this.end - 120) tr.track = 'gone';
     this.trains = this.trains.filter((t) => t.track !== 'gone');
+    /* player doors/dwell (aiDrive is bypassed for the player) */
+    if (this.player.doorsOpen) {
+      this.player.dwell -= dt;
+      if (this.player.dwell <= 0) {
+        this.player.doorsOpen = false;
+        this.player.stopIdx++;
+        this.events.push({ type: 'doors', state: 'close' });
+      }
+    }
     this.updateMeets();
     this.updateOpposite(dt);
     this.playerStop(dt);

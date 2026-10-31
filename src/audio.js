@@ -73,6 +73,15 @@ const Snd = {
     if (dual) { mk(310, 0.16); mk(415, 0.12); } else { mk(440, 0.13); }
   },
   ding() { this._blip(1150, 0.5, 0.06, 'sine'); },
+  /* three-note door chime, then guard's whistle */
+  doorChime() { this._blip(988, 0.12, 0.07, 'sine'); setTimeout(() => this._blip(1319, 0.12, 0.07, 'sine'), 140); setTimeout(() => this._blip(988, 0.2, 0.07, 'sine'), 280); },
+  whistle() {
+    if (!this.ready || this.muted) return;
+    const t0 = this.ctx.currentTime, o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(1900, t0); o.frequency.exponentialRampToValueAtTime(1350, t0 + 0.32);
+    g.gain.setValueAtTime(0.12, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.4);
+    o.connect(g); g.connect(this.master); o.start(t0); o.stop(t0 + 0.45);
+  },
   _blip(f, dur, g, type) {
     if (!this.ready || this.muted) return;
     const t0 = this.ctx.currentTime, o = this.ctx.createOscillator(), og = this.ctx.createGain();

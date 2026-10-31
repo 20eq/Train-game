@@ -181,6 +181,20 @@ class R3D {
         post.position.set(q.x + dx, q.y + 2.2, q.z + 6.2); g.add(post);
       }
     }
+    /* waiting commuters on the platform */
+    const rng = mulberry32(Math.floor(pf.km));
+    const n = Math.max(4, Math.floor(pf.len / 16));
+    const body = new T.InstancedMesh(new T.CylinderGeometry(0.18, 0.22, 1.1, 5), this.mat('#cfcabd'), n);
+    const heads = new T.InstancedMesh(new T.SphereGeometry(0.15, 6, 6), this.mat('#b98866'), n);
+    const M2 = new T.Matrix4(), s2 = new T.Vector3(1, 1, 1), idq = new T.Quaternion(), v2 = new T.Vector3();
+    for (let i = 0; i < n; i++) {
+      const x = q.x + (rng() - 0.5) * pf.len * 0.9;
+      const z = q.z + 4.4 + rng() * 2.6;
+      v2.set(x, q.y + 0.9 + 0.55, z); M2.compose(v2, idq, s2); body.setMatrixAt(i, M2);
+      v2.set(x + (rng() - 0.5) * 0.1, q.y + 0.9 + 1.28, z); M2.compose(v2, idq, s2); heads.setMatrixAt(i, M2);
+    }
+    this._crowdColors(body, n, rng);
+    this.world.add(body, heads);
     this.world.add(g);
   }
 
@@ -355,6 +369,33 @@ class R3D {
   }
 
   /* ================= trains ================= */
+  _crowdColors(im, n, rng) {
+    const cols = [0xd8d3c8, 0x9fb3c8, 0xc8a8b8, 0xb8c4a8, 0xe0d8c0, 0x8ea6b8, 0xd6c2a0, 0xc07870];
+    for (let i = 0; i < n; i++) im.setColorAt(i, new THREE.Color(cols[Math.floor(rng() * cols.length)]));
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  }
+
+  /* packed-local door crowds: one instanced bunch per car (car-local, moves free) */
+  _carCrowd(car, def, rng, dense) {
+    const T = THREE, doors = 4;
+    const n = Math.max(3, Math.round(doors * (dense ? 2.2 : 1.2)));
+    const body = new T.InstancedMesh(new T.CylinderGeometry(0.17, 0.2, 1.05, 5), this.mat('#cfcabd'), n);
+    const head = new T.InstancedMesh(new T.SphereGeometry(0.145, 6, 6), this.mat('#b98866'), n);
+    const M = new T.Matrix4(), s = new T.Vector3(1, 1, 1), q = new T.Quaternion(), v = new T.Vector3();
+    const fr = [0.17, 0.38, 0.62, 0.83];
+    for (let i = 0; i < n; i++) {
+      const cx = (fr[i % doors] + (rng() - 0.5) * 0.06 - 0.5) * def.cars[0].len;
+      const side = (i % 2 ? 1 : -1) * (3.1 / 2 + 0.12);
+      const y0 = 0.55 + rng() * 0.12;
+      v.set(cx, y0 + 0.52, side + (rng() - 0.5) * 0.14);
+      M.compose(v, q, s); body.setMatrixAt(i, M);
+      v.set(cx + (rng() - 0.5) * 0.08, y0 + 1.22, side + (rng() - 0.5) * 0.1);
+      M.compose(v, q, s); head.setMatrixAt(i, M);
+    }
+    this._crowdColors(body, n, rng);
+    car.add(body, head);
+  }
+
   buildTrain(def, isPlayer) {
     const T = THREE;
     const LIV = { wr_violet: ['#e9e2d2', '#5c3a8e'], cr_crimson: ['#8c2438', '#e8ddc0'], ch_green: ['#e9e2d2', '#1d6b4a'], kol_blue: ['#e9e2d2', '#2a4d9b'], memu: ['#e9e2d2', '#3a5fa8'], dmu: ['#b8c4cc', '#3a5fa8'], wdp4d: ['#d84b27', '#f5e9d8'], wdg4: ['#3a6ec2', '#f2c518'], wap7: ['#e8e6e0', '#c23b2e'], lhb: ['#41598f', '#dfe3e8'], icf: ['#7c2436', '#e8ddc0'], vb: ['#eceef2', '#1e3a8a'], nmr: ['#2b3d8f', '#e8c34a'], boxn: ['#8a6a4e', '#6a4e38'] };
@@ -394,6 +435,10 @@ class R3D {
       grp.add(car);
       cars.push(car);
     });
+    if (def.cls === 'EMU') {
+      const rng = mulberry32(1234 + def.cars.length * 7);
+      cars.forEach((car, i) => this._carCrowd(car, def, rng, isPlayer || rng() > 0.35));
+    }
     this.trainGrp.add(grp);
     const handle = { grp, cars };
     if (isPlayer) this.playerHandle = handle;

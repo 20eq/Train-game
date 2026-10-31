@@ -11,6 +11,8 @@ const App = {
   keys: {},
   orbit: { az: 2.4, el: 0.4, r: 60 },
 
+  autoDrive: false,
+
   start(route, svc, mode) {
     this.route = route; this.svc = svc; this.mode = mode;
     this.game = new Game(route, svc, mode);
@@ -46,6 +48,7 @@ const App = {
       if (e.key === 'h' || e.key === 'H') Snd.horn(this.game.player.def.horn);
       if (e.key === 'Escape') this._pause();
       if (e.key === 't' || e.key === 'T') this.timeScale = this.timeScale === 1 ? 4 : this.timeScale === 4 ? 12 : 1;
+      if (e.key === 'b' || e.key === 'B') { this.autoDrive = !this.autoDrive; this.hud(this.autoDrive ? 'Auto driver engaged' : 'Manual control'); }
       if (e.key === 'p' || e.key === 'P') this.rainTarget = this.rainTarget > 0 ? 0 : 0.85;
       if (e.key === 'n' || e.key === 'N') this.tod = (this.tod + 12) % 24;
       if (e.key === ' ') e.preventDefault();
@@ -139,9 +142,12 @@ const App = {
     const dt = dtRaw * this.timeScale;
     this.t += dt;
 
-    /* player controls */
+    /* player controls (or auto demo driver) */
     const cmd = this.game.cmd;
-    if (this.keys['ArrowUp']) cmd.throttle = clamp(cmd.throttle + dt * 0.5, 0, 1);
+    if (this.autoDrive) {
+      aiDrive(this.game.player, this.game.box, { dt, trains: this.game.trains });
+      cmd.throttle = this.game.player.throttle; cmd.brake = this.game.player.brakeCmd;
+    } else if (this.keys['ArrowUp']) cmd.throttle = clamp(cmd.throttle + dt * 0.5, 0, 1);
     if (this.keys['ArrowDown']) cmd.throttle = clamp(cmd.throttle - dt * 0.8, 0, 1);
     if (this.keys['ArrowRight']) cmd.brake = clamp(cmd.brake + dt * 0.7, 0, 1);
     if (this.keys['ArrowLeft']) cmd.brake = clamp(cmd.brake - dt * 1.0, 0, 1);
@@ -155,7 +161,8 @@ const App = {
 
     const evs = this.game.advance(dt);
     for (const e of evs) {
-      if (e.type === 'stop') { Snd.ding(); this.hud(e.n + ' — ' + fmtDelay(e.delay)); }
+      if (e.type === 'stop') { Snd.doorChime(); this.hud(e.n + ' — ' + fmtDelay(e.delay)); }
+      if (e.type === 'doors') { Snd.whistle(); this.hud('भरा है / khali — doors closing, stand clear'); }
       if (e.type === 'meet') { Snd.horn('emu'); this.hud('Crossing: ' + e.who + ' at ' + e.at); }
       if (e.type === 'spad' && e.who === 'You') this.hud('⚠ SPAD — signal passed at danger');
       if (e.type === 'done') { this.state = 'paused'; this._summary(); }
@@ -181,18 +188,25 @@ const App = {
 
   _hud() {
     const g = this.game, pl = g.player, el = document.getElementById('hud');
+    /* next-station announcement once per approach */
+    const ann = g.nextStopInfo ? g.nextStopInfo() : null;
+    if (ann && ann.km - pl.s < 750 && this._lastAnn !== ann.n) {
+      this._lastAnn = ann.n;
+      this.hud('Next station: ' + ann.n + (ann.loc ? '  ·  ' + ann.loc : ''));
+      Snd.ding();
+    }
     document.getElementById('hSpeed').textContent = (pl.v * 3.6).toFixed(0);
     document.getElementById('hLimit').textContent = (limitAt(this.route, pl.s) * 3.6).toFixed(0);
     const sig = g.nextSignalInfo();
     const sigEl = document.getElementById('hSig');
     if (sig) { sigEl.textContent = sig.aspect.toUpperCase(); sigEl.style.color = sig.aspect === 'red' ? '#ff5340' : sig.aspect === 'green' ? '#3ad96e' : '#ffb300'; }
     else sigEl.textContent = '—';
-    const ns = g.nextStopInfo();
+    const ns = g.nextStopInfo ? g.nextStopInfo() : null;
     document.getElementById('hNext').textContent = ns ? ns.n : this.mode === 'freeroam' ? 'free roam' : fmtKm(pl.s);
     document.getElementById('hClock').textContent = fmtClock(this.tod * 3600);
     document.getElementById('hThrottle').style.width = (pl.throttle * 100).toFixed(0) + '%';
     document.getElementById('hBrake').style.width = (pl.brakeCmd * 100).toFixed(0) + '%';
-    document.getElementById('hScore').textContent = this.mode === 'service' ? g.score.stops + '/' + g.score.total + ' on-time · ' + (g.score.spads ? 'SPAD!' : 'clean') : 'free';
+    document.getElementById('hScore').textContent = (this.autoDrive ? 'AUTO · ' : '') + (this.mode === 'service' ? g.score.stops + '/' + g.score.total + ' on-time · ' + (g.score.spads ? 'SPAD!' : 'clean') : 'free');
   },
 
   _summary() {
@@ -210,7 +224,7 @@ function buildMenu() {
   for (const r of Object.values(ROUTES)) {
     html += '<div class="route"><div class="rhead"><b>' + r.title + '</b><span>' + r.sub + ' · ' + (r.km).toFixed(0) + ' km · ' + r.stations.length + ' stations</span></div>';
     html += '<div class="svcs"><button class="free" data-route="' + r.id + '">Free roam</button>';
-    for (const s of r.services) html += '<button data-route="' + r.id + '" data-svc="' + s.id + '">' + s.label + ' <small>' + s.depart + '</small></button>';
+    for (const s of r.services) html += '<button data-route="' + r.id + '" data-svc="' + s.id + '">' + s.label + ' <small>' + s.depart + '</small></button><button data-route="' + r.id + '" data-svc="' + s.id + '" data-auto="1" title="AI drives, you ride along">▶ demo</button>';
     html += '</div></div>';
   }
   list.innerHTML = html;
@@ -220,6 +234,7 @@ function buildMenu() {
     const r = ROUTES[b.dataset.route];
     const svc = b.dataset.svc ? r.services.find((s) => s.id === b.dataset.svc) : null;
     App.start(r, svc, svc ? 'service' : 'freeroam');
+    if (b.dataset.auto) { App.autoDrive = true; App.camMode = 1; }
   });
 }
 

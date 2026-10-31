@@ -94,6 +94,25 @@ console.log('\n== physics ==');
   for (let i = 0; i < 60 * 120; i++) { rt.throttle = 1; stepTrain(rt, 0.1, {}); }
   if (rt.v <= 8.75) ok(`NMR rack cap respected (${(rt.v * KMH).toFixed(1)} km/h in rack)`);
   else fail(`NMR overspeed in rack: ${(rt.v * KMH).toFixed(1)} km/h`);
+  /* local EMU benchmarks (real Mumbai 12-car: ~0.8 m/s^2 start, 0-60 in ~26-30s,
+     ~450 m service brake from 100 km/h) — the "accurate local" gate */
+  const emu = makeTrain(wr, def, { s0: 300 });
+  let a0 = null, t60 = null;
+  for (let i = 0; i <= 60 * 40; i++) {
+    emu.throttle = 1; stepTrain(emu, 0.1, {});
+    if (a0 === null && emu.v > 1.39) a0 = emu.a;
+    if (t60 === null && emu.v >= 60 * MPS) { t60 = i * 0.1; break; }
+  }
+  if (a0 >= 0.65 && a0 <= 1.05) ok(`EMU start accel ${(a0).toFixed(2)} m/s² (real ~0.8)`);
+  else fail(`EMU start accel ${a0 && a0.toFixed(2)} out of real band 0.65-1.05`);
+  if (t60 >= 20 && t60 <= 33) ok(`EMU 0-60 km/h in ${t60.toFixed(1)} s (real ~26-30 loaded)`);
+  else fail(`EMU 0-60 in ${t60 && t60.toFixed(1)} s out of real band 20-33`);
+  const bk = makeTrain(wr, def, { s0: 500 });
+  bk.v = 100 * MPS; bk.brakeCmd = 1;
+  let bd = 0;
+  while (bk.v > 0.02 && bd < 2000) { stepTrain(bk, 0.1, {}); bd += bk.v * 0.1; }
+  if (bd >= 380 && bd <= 540) ok(`EMU service brake 100-0 in ${bd.toFixed(0)} m (real ~450)`);
+  else fail(`EMU brake 100-0 ${bd.toFixed(0)} m out of real band 380-540`);
   /* rollaway: doors open on a 1-in-100 downhill must hold */
   const rr = makeTrain(wr, def, { s0: 20000 });
   rr.v = 0; rr.doorsOpen = true; rr.brakeCmd = 0;
@@ -168,6 +187,33 @@ function smoke(routeId, svcIdx, maxSimS) {
   else if (!g.done) fail(`${routeId}: did not finish in ${maxSimS}s sim (at km ${(g.player.s / KM).toFixed(1)}, ${stops} stops, spads=${spads})`);
   else ok(`${routeId} "${svc.label}": complete in ${fmtClock(t)} sim, ${stops}/${g.tt.filter((x) => x.halt).length} stops scored, spads=${spads}`);
   return { g, t, collision };
+}
+
+/* player-command smoke: drive via g.cmd ONLY (no aiDrive on player) —
+   catches interactive-path softlocks like doors never closing */
+{
+  const r = ROUTES.wr, svc = r.services[0];
+  const g = new Game(r, svc, 'service');
+  const dt = 0.5;
+  let t = 0, opens = 0, prevOpen = false;
+  const brakeD = (v) => (v * v) / (2 * 0.72);
+  while (!g.done && t < 4200) {
+    /* station-aware naive driver via commands only */
+    const nextHalt = (g.tt || []).find((row) => row.halt && !row.actual && row.st.km > g.player.s - 30);
+    const v = g.player.v;
+    if (g.player.doorsOpen) { g.cmd.throttle = 0; g.cmd.brake = 1; }
+    else if (nextHalt) {
+      const d = nextHalt.st.km - g.player.s;
+      if (d < brakeD(v) * 1.25 + 30) { g.cmd.throttle = 0; g.cmd.brake = 1; }
+      else if (d < 160 && v > 6 * MPS) { g.cmd.throttle = 0; g.cmd.brake = 0.7; }
+      else { g.cmd.throttle = 1; g.cmd.brake = 0; }
+    } else { g.cmd.throttle = g.player.s > g.end - 700 ? 0 : 1; g.cmd.brake = g.player.s > g.end - 500 ? 1 : 0; }
+    g.advance(dt); t += dt;
+    if (g.player.doorsOpen && !prevOpen) opens++;
+    prevOpen = g.player.doorsOpen;
+  }
+  if (g.score.total >= 2 && opens >= 2) ok(`interactive drive: ${g.score.total} stops, doors cycled ${opens}x (departs cleanly)`);
+  else fail(`interactive drive broken: stops=${g.score.total}, door cycles=${opens} @km ${(g.player.s / KM).toFixed(1)}`);
 }
 
 smoke('mys', 0, 5200);           // single-line loop meet
