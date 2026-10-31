@@ -10,34 +10,93 @@ const World3D = {
   TRACK_GAUGE_VIS: 2.6,
 
   /* Build the sampled path for a route.
-     x = along-line (m), z = lateral offset (curvature), y = elevation.
-     Curvature: smooth fbm, gentle (|dz/ds| < 0.12), scaled by route length. */
+     x = along-line (m), z = lateral offset, y = elevation.
+     With real geo (GEO data): z follows the TRUE geographic shape —
+     station lat/lon projected onto the route axis, cosine-smoothed —
+     plus small noise detail. Otherwise: smooth fbm curvature. */
   buildPath(route) {
     const N = Math.floor(route.km * KM / this.DS) + 2;
-    const n = fbm1D(hashStr(route.id + 'curve'), 3);
-    const amp = Math.min(240, 90 + route.km * 1.1); // lateral amplitude
     const xs = new Float32Array(N), ys = new Float32Array(N), zs = new Float32Array(N);
-    // integrate dz/ds = k * n(x), with k tapering to 0 near terminals
-    let z = 0;
     const L = route.km * KM;
+    const anchors = [];
+    if (route.geo) {
+      const D2R = Math.PI / 180, R = 6371e3;
+      const g0 = route.geo.stations[0];
+      const la0 = g0.lat * D2R, lo0 = g0.lon * D2R, cla0 = Math.cos(la0);
+      const pr = route.geo.stations.map((st) => ({
+        s: st.km * KM,
+        ex: R * (st.lon - g0.lon) * D2R * cla0,
+        ny: R * (st.lat - g0.lat) * D2R,
+      }));
+      const end = pr[pr.length - 1];
+      const b = Math.atan2(end.ex, end.ny); // overall bearing from north
+      const sb = Math.sin(b), cb = Math.cos(b);
+      for (const p of pr) anchors.push({ s: p.s, off: p.ex * cb - p.ny * sb });
+      anchors[0].off = 0;
+    }
+    const zAt = (x) => {
+      if (!anchors.length) return null;
+      if (x <= anchors[0].s) return anchors[0].off;
+      for (let i = 1; i < anchors.length; i++) {
+        if (x <= anchors[i].s) {
+          const a = anchors[i - 1], c = anchors[i];
+          const t = (x - a.s) / Math.max(1, c.s - a.s);
+          const tc = (1 - Math.cos(Math.PI * t)) / 2;
+          return a.off + (c.off - a.off) * tc;
+        }
+      }
+      return anchors[anchors.length - 1].off;
+    };
+    const n = fbm1D(hashStr(route.id + 'curve'), 3);
     for (let i = 0; i < N; i++) {
       const x = i * this.DS;
-      // flatten curvature within 500 m of any station centre (platforms straight)
-      let flat = 1;
-      for (const st of route.stations) {
-        const d = Math.abs(x - (st.km + st.plat / 2));
-        if (d < 700) { flat = Math.min(flat, d / 700); }
+      xs[i] = x; ys[i] = route.elevAt(x / KM);
+      const endFade = Math.min(smoothstep(0, 400, x), 1 - smoothstep(L - 400, L, x));
+      if (anchors.length) {
+        zs[i] = zAt(x) + n(x / 1500) * 10 * endFade;
+      } else {
+        // procedural curvature (non-geo routes), flattened near stations
+        let flat = 1;
+        for (const st of route.stations) {
+          const d = Math.abs(x - (st.km + st.plat / 2));
+          if (d < 700) flat = Math.min(flat, d / 700);
+        }
+        if (i === 0) { zs[0] = 0; continue; }
+        zs[i] = clamp(zs[i - 1] + n(x / 950) * 0.085 * flat * this.DS, -Math.min(240, 90 + route.km * 1.1), Math.min(240, 90 + route.km * 1.1));
       }
-      const slope = n(x / 950) * 0.085 * flat;
-      z += slope * this.DS;
-      z = clamp(z, -amp, amp);
-      xs[i] = x; ys[i] = route.elevAt(x / KM); zs[i] = z;
     }
-    // tangents (unit, in xz-plane + dy)
+    // adaptive easement: smooth until max lateral step is comfortable for rail
+    const k = [1, 2, 3, 2, 1], ks = 9;
+    const smooth = () => {
+      const t = Float32Array.from(zs);
+      for (let i = 0; i < N; i++) {
+        let acc = 0, w = 0;
+        for (let j = -2; j <= 2; j++) {
+          const ii = i + j;
+          if (ii < 0 || ii >= N) continue;
+          acc += t[ii] * k[j + 2]; w += k[j + 2];
+        }
+        zs[i] = acc / w;
+      }
+    };
+    // ease until heading rate matches real rail (min radius ~320 m), cap passes
+    const DS = this.DS;
+    let passes = 0;
+    while (passes < 90) {
+      let pPrev = Math.atan2(zs[1] - zs[0], DS), mx = 0;
+      for (let i = 2; i < N; i++) {
+        const phi = Math.atan2(zs[i] - zs[i - 1], DS);
+        mx = Math.max(mx, Math.abs(phi - pPrev));
+        pPrev = phi;
+      }
+      if (mx / DS <= 1 / 320) break;
+      smooth(); passes++;
+    }
+    // tangents (unit)
     const tx = new Float32Array(N), ty = new Float32Array(N), tz = new Float32Array(N);
     for (let i = 0; i < N; i++) {
-      const a = Math.max(0, i - 1), b = Math.min(N - 1, i + 1);
-      let dx = xs[b] - xs[a], dy = ys[b] - ys[a], dz = zs[b] - zs[a];
+      const a = Math.max(0, i - 1), b2 = Math.min(N - 1, i + 1);
+      let dx = xs[b2] - xs[a], dy = ys[b2] - ys[a], dz = zs[b2] - zs[a];
       const l = Math.hypot(dx, dy, dz) || 1;
       tx[i] = dx / l; ty[i] = dy / l; tz[i] = dz / l;
     }

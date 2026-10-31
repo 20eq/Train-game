@@ -1,0 +1,34 @@
+name: Zencoder PR review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  zen-review:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check credentials
+        id: guard
+        env:
+          ZCID: ${{ secrets.ZENCODER_CLIENT_ID }}
+        run: |
+          if [ -z "$ZCID" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Zencoder review skipped - add ZENCODER_CLIENT_ID and ZENCODER_CLIENT_SECRET repo secrets (from your zencoder.ai account) to enable."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip != 'true'
+
+      - name: Run Zencoder Agent
+        if: steps.guard.outputs.skip != 'true'
+        uses: zencoderai/zen-agents-action@main
+        with:
+          prompt: "Please review the pull request with number ${{ github.event.pull_request.number }} and add a comment to it. Address only the serious issues, not the minor ones. If you didn't find any serious issues, please write 'Looks good to me!'."
+          zencoder_client_id: ${{ secrets.ZENCODER_CLIENT_ID }}
+          zencoder_client_secret: ${{ secrets.ZENCODER_CLIENT_SECRET }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}

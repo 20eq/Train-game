@@ -166,7 +166,7 @@ const ROUTES = {
     services: [{
       id: 'mys-dmu', label: 'DMU — Chamarajanagar', train: 'dmu_mys', depart: '06:15',
       to: 'Chamarajanagar', stops: 'all', pace: 43, dwell: 25, ann: 'CHAMARAJANAGAR', difficulty: 2,
-      meets: [{ at: 'Nanjangud Town', aiTrain: 'dmu_mys', aiLabel: '05:50 Mysuru DMU (Up)', aheadKm: 6.5, triggerKm: 2.6 }],
+      meets: [{ at: 'Nanjangud Town', aiTrain: 'dmu_mys', aiLabel: '05:50 Mysuru DMU (Up)', aheadKm: 2.4, triggerKm: 1.9 }],
     }],
   },
 
@@ -192,13 +192,13 @@ const ROUTES = {
         id: 'konkan-exp', label: 'Konkan Express — Madgaon', train: 'konkan_exp', depart: '07:20',
         to: 'Madgaon Jn', stops: ['Kankavali', 'Kudal', 'Sawantwadi Road', 'Thivim', 'Madgaon Jn'],
         pace: 56, dwell: 40, ann: 'MADGAON', difficulty: 3,
-        meets: [{ at: 'Pernem', aiTrain: 'konkan_exp', aiLabel: '10111 Konkan Kanya (Up)', aheadKm: 7, triggerKm: 2.6 }],
+        meets: [{ at: 'Pernem', aiTrain: 'konkan_exp', aiLabel: '10111 Konkan Kanya (Up)', aheadKm: 2.6, triggerKm: 1.9 }],
       },
       {
         id: 'konkan-vb', label: 'Vande Bharat — Madgaon', train: 'vb_express', depart: '14:25',
         to: 'Madgaon Jn', stops: ['Kudal', 'Thivim', 'Madgaon Jn'],
         pace: 68, dwell: 30, ann: 'MADGAON', difficulty: 3,
-        meets: [{ at: 'Kudal', aiTrain: 'wdg_freight', aiLabel: 'BOXN Freight (Up)', aheadKm: 5, triggerKm: 3.2 }],
+        meets: [{ at: 'Kudal', aiTrain: 'wdg_freight', aiLabel: 'BOXN Freight (Up)', aheadKm: 2.8, triggerKm: 2.0 }],
       },
     ],
   },
@@ -257,8 +257,44 @@ const ROUTES = {
 };
 
 /* ============================================================
-   Derived data: platform lengths, schedule computation helpers
+   Derived data: apply real geo (when available), then build
+   elevations, gradients and timetables from it.
    ============================================================ */
+for (const r of Object.values(ROUTES)) {
+  const g = typeof GEO !== 'undefined' && GEO[r.id];
+  const oldKm = r.km;
+  if (g && g.stations.length === r.stations.length) {
+    r.geo = g;
+    for (let i = 0; i < r.stations.length; i++) {
+      const gs = g.stations[i];
+      if (gs && (gs.n === r.stations[i].n || Math.abs(gs.km - r.stations[i].km / KM) < oldKm)) {
+        const s = r.stations[i];
+        s.km = gs.km * KM; s.elev = gs.elev; s.lat = gs.lat; s.lon = gs.lon;
+      }
+    }
+    r.km = r.stations[r.stations.length - 1].km / KM;
+    // rescale structural km positions from old length to real length
+    const k = r.km / oldKm;
+    const sc = (arr) => (arr || []).map(([a, b]) => [a * k, b * k]);
+    r.tunnels = sc(r.tunnels);
+    r.viaducts = sc(r.viaducts);
+    r.crossings = (r.crossings || []).map((c) => c * k);
+    if (r.limits) r.limits = r.limits.map(([a, b, v]) => [a * k, b * k, v]);
+  }
+  // elevation & gradients from real station elevations
+  if (r.stations[0].elev !== undefined) {
+    r.gradients = [];
+    for (let i = 1; i < r.stations.length; i++) {
+      const a = r.stations[i - 1], b = r.stations[i];
+      const seg = Math.max(0.5, (b.km - a.km) / KM);
+      r.gradients.push([a.km / KM, b.km / KM, (b.elev - a.elev) / 1000 / seg]);
+    }
+  }
+  r.elevAt = buildElevation(r.gradients, r.stations[0].elev || r.elev0 || 0);
+  for (const s of r.stations) { if (s.plat === undefined) s.plat = 250; }
+  for (const svc of r.services) svc.timetable = buildTimetable(r, svc);
+  r.gradList = r.gradients;
+}
 function routeKmLen(r) { return r.km * KM; }
 
 function stationByName(r, n) { return r.stations.find((s) => s.n === n); }
@@ -295,9 +331,3 @@ function buildTimetable(route, svc) {
   return tt;
 }
 
-for (const r of Object.values(ROUTES)) {
-  r.elevAt = buildElevation(r.gradients, r.elev0);
-  for (const s of r.stations) { if (s.plat === undefined) s.plat = 250; }
-  for (const svc of r.services) svc.timetable = buildTimetable(r, svc);
-  r.gradList = r.gradients;
-}

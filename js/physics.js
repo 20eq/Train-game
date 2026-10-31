@@ -89,7 +89,10 @@ function aiDrive(t, dt, ctx) {
   // meeting train (opposing, must stop at loop)
   if (ai.stopAt !== undefined) {
     const d = (ai.stopAt - t.s) * t.dir;
-    const brakeB = Math.max(0.3, def.brake * 0.5);
+    const kmHere = t.s / KM;
+    const grade = gradeAt(ctx.grads, kmHere);
+    // compensate braking for gradient (downhill needs more brake)
+    const brakeB = Math.max(0.3, def.brake * 0.5) + Math.max(0, -grade * G);
     const vAllow = Math.sqrt(2 * brakeB * Math.max(0, d - 30)) + 0.3;
     if (d <= 0) { // reached/passed the loop — pin
       t.v = 0; t.throttle = 0; t.brakeCmd = 1; ai.arrived = true;

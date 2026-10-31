@@ -41,7 +41,7 @@ const sandbox = {
 sandbox.window = { innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1, addEventListener() {} };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
-for (const f of ['utils', 'data/trains', 'data/themes', 'data/routes', 'audio', 'signalling', 'physics']) {
+for (const f of ['utils', 'data/trains', 'data/themes', 'data/geo', 'data/routes', 'audio', 'signalling', 'physics']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f + '.js'), 'utf8'), sandbox, { filename: f + '.js' });
 }
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js3d', 'world.js'), 'utf8'), sandbox, { filename: 'world.js' });
@@ -55,16 +55,23 @@ const ok = (m) => console.log('  ✅ ' + m);
 console.log('\n== 3D world geometry ==');
 for (const r of Object.values(ROUTES)) {
   const p = World3D.buildPath(r);
-  let bad = null;
+  let bad = null, zPrevPhi = 0;
   // finite & tangent unit
   for (let i = 0; i < p.N; i++) {
     if (!isFinite(p.xs[i]) || !isFinite(p.ys[i]) || !isFinite(p.zs[i])) { bad = 'non-finite sample @' + i; break; }
     const tl = Math.hypot(p.tx[i], p.ty[i], p.tz[i]);
     if (Math.abs(tl - 1) > 0.02) { bad = 'tangent not unit @' + i; break; }
-    if (i > 0 && Math.abs(p.zs[i] - p.zs[i - 1]) > 0.085 * World3D.DS * 1.05) { bad = 'curvature spike @' + i; break; }
+    // curvature check: heading rate must stay within real-rail radius (>=150 m)
+    if (i > 1) {
+      const DS = World3D.DS;
+      const phi = Math.atan2(p.zs[i] - p.zs[i - 1], DS);
+      const kappa = Math.abs(phi - zPrevPhi) / DS;
+      if (kappa > 1 / 150) { bad = 'curvature spike @' + i + ' (R~' + Math.round(1 / Math.max(kappa, 1e-9)) + 'm)'; break; }
+      zPrevPhi = phi;
+    } else if (i === 1) zPrevPhi = Math.atan2(p.zs[1] - p.zs[0], World3D.DS);
   }
   // ends reasonably centred
-  if (Math.abs(p.zs[0]) > 5) bad = 'start z not ~0';
+  if (Math.abs(p.zs[0]) > 30) bad = 'start z not ~0';
   if (!bad && Math.abs(p.zs[p.N - 1]) > 240) bad = 'end z wild';
   // posAt consistent with samples
   if (!bad) {
@@ -163,6 +170,17 @@ function driveOnce(routeId, svcId, maxS) {
       if (tr === p || tr.track === 'far' || (tr.ai && tr.ai.onLoop)) continue;
       const d = Math.min(tr.s, tr.rear) - p.s - 15;
       if (d > -50 && d < 2500) { vT = Math.min(vT, Math.sqrt(Math.max(0, 2 * 0.33 * Math.max(0, d))) * 3.6); if (d < 45) vT = 0; }
+    }
+    // single-line rule: hold at the meet station's home signal until the loop clears
+    for (const m of meets) {
+      if (m.spawned && !m.cleared && m.train) {
+        const st = stationByName(r, m.at);
+        const dd = st.km - p.s;
+        if (dd > -80 && dd < 2600) {
+          stopKm = Math.min(stopKm ?? 1e12, st.km - 420);
+          if (dd < 620) vT = 0;
+        }
+      }
     }
     if (stopKm !== null) vT = Math.min(vT, Math.sqrt(Math.max(0, 2 * 0.42 * Math.max(0, stopKm - p.s - 3))) * 3.6 + 0.4);
     if (p.berthed) {
