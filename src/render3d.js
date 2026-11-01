@@ -49,6 +49,15 @@ class R3D {
   }
   mat(c, opts) { return new THREE.MeshLambertMaterial(Object.assign({ color: c }, opts || {})); }
 
+  loadTex(name, rx, ry) {
+    const t = new THREE.TextureLoader().load('tex/' + name + '.jpg');
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx || 1, ry || 1);
+    t.anisotropy = 8;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
   /* ================= world build ================= */
   build(route, path, lay, svc) {
     const T = THREE;
@@ -91,11 +100,18 @@ class R3D {
       const a = ix * nz + iz, b = a + nz;
       idx.push(a, a + 1, b, a + 1, b + 1, b); /* counter-clockwise from above: faces up */
     }
+    const uv = new Float32Array(nx * nz * 2);
+    for (let ix = 0; ix < nx; ix++) for (let iz = 0; iz < nz; iz++) {
+      const k = (ix * nz + iz) * 2;
+      uv[k] = (ix * step) / 7; uv[k + 1] = ((iz / (nz - 1)) * 2 * half) / 7;
+    }
     const tg = new T.BufferGeometry();
     tg.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    tg.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
     tg.setAttribute('color', new T.Float32BufferAttribute(col, 3));
     tg.setIndex(idx); tg.computeVertexNormals();
-    const terrMesh = new T.Mesh(tg, new T.MeshLambertMaterial({ vertexColors: true }));
+    this.groundTex = this.loadTex('grass', 1, 1);
+    const terrMesh = new T.Mesh(tg, new T.MeshLambertMaterial({ vertexColors: true, map: this.groundTex }));
     terrMesh.receiveShadow = true;
     this.world.add(terrMesh);
 
@@ -149,7 +165,9 @@ class R3D {
       for (let i = 0; i < path.N; i += 8) eMin = Math.min(eMin, path.ys[i]);
       const pg = new T.PlaneGeometry(80000, 80000);
       pg.rotateX(-Math.PI / 2);
-      const pm = new T.Mesh(pg, new T.MeshLambertMaterial({ color: new T.Color('#8ba084').lerp(new T.Color(this.theme.ground), 0.3).multiplyScalar(0.82) }));
+      const pgUv = pg.getAttribute('uv');
+      for (let i = 0; i < pgUv.count; i++) pgUv.setXY(i, pgUv.getX(i) * 2500, pgUv.getY(i) * 2500);
+      const pm = new T.Mesh(pg, new T.MeshLambertMaterial({ color: 0xcfd4c2, map: this.groundTex }));
       pm.receiveShadow = true;
       pm.position.set(path.L / 2, eMin - 30, 0);
       this.world.add(pm);
@@ -157,12 +175,13 @@ class R3D {
 
     /* ---------- track ---------- */
     this.world.add(this._ribbon(path, (m) => 0, 5.6, 0.1, '#57534c'));                          // formation
-    this.world.add(this._ribbon(path, (m) => 0, 3.4, 0.24, this.theme.ballast || '#6d6a63'));   // ballast
+this.ballastTex = this.loadTex('ballast', 1, 1);
+    this.world.add(this._ribbon(path, (m) => 0, 3.4, 0.24, null, this.ballastTex));   // ballast
     for (const s of [-0.72, 0.72]) this.world.add(this._ribbon(path, (m) => s, 0.14, 0.42, '#7c8087')); // rails
     this.world.add(this._sleepers(path, 0));
     if (route.double) {
       /* second line for oncoming traffic */
-      this.world.add(this._ribbon(path, (m) => -4.9, 3.2, 0.24, this.theme.ballast || '#6d6a63'));
+      this.world.add(this._ribbon(path, (m) => -4.9, 3.2, 0.24, null, this.ballastTex));
       for (const s of [-5.58, -4.22]) this.world.add(this._ribbon(path, (m) => s, 0.13, 0.42, '#7c8087'));
       this.world.add(this._sleepers(path, (m) => -4.9));
     }
@@ -223,21 +242,25 @@ class R3D {
   }
 
   /* flat ribbon following the path at lateral offset fn(m), width w, height y */
-  _ribbon(path, offFn, w, y, color) {
+  _ribbon(path, offFn, w, y, color, tex) {
     const T = THREE, n = Math.floor(path.L / 12) + 1;
-    const pos = new Float32Array(n * 2 * 3), idx = [];
+    const pos = new Float32Array(n * 2 * 3), idx = [], uv = new Float32Array(n * 2 * 2);
     for (let i = 0; i < n; i++) {
       const m = Math.min(path.L, i * 12);
       const q = WB.posAt(path, m, 0), o = offFn(m);
       /* perpendicular in xz plane */
       pos[i * 6] = q.x; pos[i * 6 + 1] = q.y + y; pos[i * 6 + 2] = q.z + (o - w / 2);
       pos[i * 6 + 3] = q.x; pos[i * 6 + 4] = q.y + y; pos[i * 6 + 5] = q.z + (o + w / 2);
+      uv[i * 4] = 0; uv[i * 4 + 1] = m / 2.5;
+      uv[i * 4 + 2] = 1; uv[i * 4 + 3] = m / 2.5;
       if (i < n - 1) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     }
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
     g.setIndex(idx); g.computeVertexNormals();
-    const mesh = new T.Mesh(g, this.mat(color));
+    const material = tex ? new T.MeshLambertMaterial({ map: tex }) : this.mat(color);
+    const mesh = new T.Mesh(g, material);
     mesh.receiveShadow = true;
     return mesh;
   }
@@ -261,7 +284,8 @@ class R3D {
     const T = THREE, q = WB.posAt(this.p, pf.km, 0); /* pf.km is metres */
     const g = new T.Group();
     const h = 0.9;
-    const slab = new T.Mesh(new T.BoxGeometry(pf.len, h, 7), this.mat('#9a958c'));
+    if (!this.concreteTex) this.concreteTex = this.loadTex('concrete', 1, 1);
+    const slab = new T.Mesh(new T.BoxGeometry(pf.len, h, 7), new T.MeshLambertMaterial({ color: 0xcfcabd, map: this.concreteTex }));
     slab.castShadow = true; slab.receiveShadow = true;
     slab.position.set(q.x, q.y + h / 2, q.z + 5.4); g.add(slab);
     const edge = new T.Mesh(new T.BoxGeometry(pf.len, 0.1, 0.5), this.mat('#d8d4c8'));
@@ -271,7 +295,8 @@ class R3D {
     yline.position.set(q.x, q.y + h + 0.03, q.z + 5.4 - 2.1); g.add(yline);
     /* full-length canopy with rib posts */
     const rl = pf.len * 0.94;
-    const roof = new T.Mesh(new T.BoxGeometry(rl, 0.26, 6.4), this.mat('#b33a2f'));
+    if (!this.roofTex) this.roofTex = this.loadTex('roof', 6, 1);
+    const roof = new T.Mesh(new T.BoxGeometry(rl, 0.26, 6.4), new T.MeshLambertMaterial({ color: 0xb33a2f, map: this.roofTex }));
     roof.position.set(q.x, q.y + 4.35, q.z + 6.4); roof.castShadow = true; g.add(roof);
     const nRib = Math.max(2, Math.floor(rl / 14));
     const rib = new T.InstancedMesh(new T.BoxGeometry(0.24, 3.5, 0.24), this.mat('#4c5158'), nRib);
@@ -516,7 +541,8 @@ class R3D {
 
   _crossing(cx, path) {
     const T = THREE, q = WB.posAt(path, cx.km, 0);
-    const road = new T.Mesh(new T.BoxGeometry(8, 0.14, 14), this.mat('#4c4c48'));
+    if (!this.asphaltTex) this.asphaltTex = this.loadTex('asphalt', 2, 4);
+    const road = new T.Mesh(new T.BoxGeometry(8, 0.14, 14), new T.MeshLambertMaterial({ color: 0x9c9c98, map: this.asphaltTex }));
     road.position.set(q.x, q.y + 0.2, q.z);
     this.world.add(road);
     /* striped gate arms, down across the road */
@@ -713,7 +739,8 @@ class R3D {
       const [body, band] = LIV[c.livery] || ['#9aa0a6', '#d0d4d8'];
       const H = { dtc: 3.4, mc: 3.4, tc: 3.3, 'memu-m': 3.5, 'dmu-p': 3.5, 'loco-e': 3.9, 'loco-d': 4.0, wdg4: 4.1, steam: 3.2, tender: 2.6, ac1: 3.6, ac2: 3.6, ac3: 3.6, sl: 3.6, gs: 3.6, pc: 3.6, dq: 3.5, vb: 3.5, rack: 2.9, boxn: 3.0, flat: 1.6, tank: 3.2 }[c.k] || 3.4;
       const W = 3.1;
-      const bm = new T.Mesh(this.carBodyGeo(c.len, H, W), this.mat(body));
+      if (!this.trainTex) this.trainTex = this.loadTex('trainmetal', 1, 1);
+      const bm = new T.Mesh(this.carBodyGeo(c.len, H, W), new T.MeshLambertMaterial({ color: body, map: this.trainTex }));
       bm.castShadow = true; bm.receiveShadow = true; car.add(bm);
       /* sloped cab nose on driving ends */
       const cabEnd = i === 0 || i === def.cars.length - 1;
