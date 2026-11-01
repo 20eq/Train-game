@@ -178,6 +178,8 @@ class R3D {
     for (const vd of lay.viaducts) this._viaduct(vd, path);
     for (const cx of lay.crossings) this._crossing(cx, path);
     this._poles(lay.poles, path, route);
+    this._skyline(route, path);
+    this._clouds(route);
     this._water(lay.water || [], path);
     this._props(lay, path);
     this._kmPosts(lay.milestones, path);
@@ -341,6 +343,55 @@ class R3D {
       off: Array.from({ length: n }, () => rng() * 100),
       M: new THREE.Matrix4(),
     });
+  }
+
+  _skyline(route, path) {
+    /* distant high-rises for metro themes */
+    if (!['mumbai', 'mumbai_cr', 'chennai', 'kolkata'].includes(route.theme)) return;
+    const T = THREE, rng = mulberry32(hashStr(route.id + 'sky'));
+    const n = 34;
+    const im = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), this.mat('#8f97a4'), n);
+    im.castShadow = false;
+    const M = new T.Matrix4(), q = new T.Quaternion(), s = new T.Vector3(), v = new T.Vector3();
+    for (let i = 0; i < n; i++) {
+      const m = rng() * Math.min(path.L, 26000);
+      const p = WB.posAt(path, m, 0);
+      const h = 26 + rng() * 68;
+      v.set(p.x, p.y + h / 2 - 8, p.z + (rng() < 0.7 ? 1 : -1) * (620 + rng() * 520));
+      s.set(14 + rng() * 22, h, 14 + rng() * 22);
+      M.compose(v, q, s);
+      im.setMatrixAt(i, M);
+    }
+    this.world.add(im);
+  }
+
+  _clouds(route) {
+    const T = THREE, rng = mulberry32(hashStr(route.id + 'cld'));
+    const n = 14;
+    const im = new T.InstancedMesh(
+      new T.SphereGeometry(1, 7, 5),
+      new T.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.82, fog: false }),
+      n * 5);
+    const M = new T.Matrix4(), q = new T.Quaternion(), s = new T.Vector3(), v = new T.Vector3();
+    let k = 0;
+    for (let i = 0; i < n; i++) {
+      const cx = rng() * 60000, cz = (rng() - 0.5) * 9000, cy = 320 + rng() * 160;
+      for (let j = 0; j < 5; j++) {
+        v.set(cx + (rng() - 0.5) * 180, cy + (rng() - 0.5) * 26, cz + (rng() - 0.5) * 90);
+        s.set(50 + rng() * 90, 16 + rng() * 18, 40 + rng() * 60);
+        M.compose(v, q, s);
+        im.setMatrixAt(k++, M);
+      }
+    }
+    this.clouds = im;
+    this.scene.add(im);
+  }
+
+  animateClouds(dt, camPos) {
+    if (!this.clouds) return;
+    this.clouds.position.x += dt * 1.6; /* slow drift */
+    this.clouds.position.x = ((this.clouds.position.x + 2000) % 4000) - 2000;
+    this.clouds.position.z = camPos.z * 0.9;
   }
 
   _water(list, path) {
@@ -614,6 +665,21 @@ class R3D {
     const cols = [0xd8d3c8, 0x9fb3c8, 0xc8a8b8, 0xb8c4a8, 0xe0d8c0, 0x8ea6b8, 0xd6c2a0, 0xc07870];
     for (let i = 0; i < n; i++) im.setColorAt(i, new THREE.Color(cols[Math.floor(rng() * cols.length)]));
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  }
+
+  /* a slice of each platform crowd walks along it (living platform) */
+  updateCrowdWalk(dt, t) {
+    if (!this._walkers) return;
+    const M = new THREE.Matrix4();
+    for (const w of this._walkers) {
+      for (let i = 0; i < w.n; i += 2) {
+        const ph = (t * w.speed[i % w.speed.length] + w.off[i]) % w.span;
+        const x = w.x0 - w.span / 2 + ph;
+        M.setPosition(x, w.y, w.z + Math.sin((t + w.off[i]) * 0.9) * 0.14);
+        w.im.setMatrixAt(i, M);
+      }
+      w.im.instanceMatrix.needsUpdate = true;
+    }
   }
 
   /* packed-local door crowds: one instanced bunch per car (car-local, moves free) */

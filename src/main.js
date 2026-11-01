@@ -201,6 +201,8 @@ const App = {
     this.r3d.animateRain(dtRaw, this.r3d.camera.position);
     this.r3d.animateWater(this.t);
     this.r3d.updateNightGlow(this.r3d._day || 1);
+    this.r3d.updateCrowdWalk(this.t, this.t);
+    this.r3d.animateClouds(dtRaw, this.r3d.camera.position);
     this.r3d.render(this.r3d.camera);
     this._hud();
   },
