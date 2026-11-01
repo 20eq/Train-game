@@ -148,6 +148,15 @@ const WB = {
     if (route.electrified) for (let m = 40; m < p.L; m += 52) out.poles.push(m);
     for (let m = 0; m < p.L; m += 480) out.posts.push(m);           /* lineside posts */
     for (let km = 0; km <= route.km; km++) out.milestones.push(km * KM);
+    /* water (sea/river bands from the theme) */
+    out.water = [];
+    const th = typeof THEMES !== 'undefined' ? THEMES[route.theme] : null;
+    if (th && th.sea) {
+      out.water.push({ a: th.seaFrom * KM, b: th.seaTo * KM, side: th.seaSide === 'left' ? -1 : 1, kind: 'sea' });
+    }
+    if (th && th.river) {
+      out.water.push({ a: th.river.from * KM, b: th.river.to * KM, side: th.river.side === 'left' ? -1 : 1, kind: 'river' });
+    }
     /* deterministic scenery props: trees & buildings outside the corridor */
     const rng = mulberry32(hashStr(route.id + 'props'));
     const theme = route.theme || '';

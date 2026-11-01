@@ -4,6 +4,8 @@
    World streaming-free static build per route + per-frame pose
    updates. Designed for the vendored three r152 module.
    ============================================================ */
+function theme_water(th) { return (th && th.sea) || (th && th.river && '#3a6f86'); }
+
 class R3D {
   constructor(canvas) {
     this.canvas = canvas;
@@ -52,6 +54,7 @@ class R3D {
     const T = THREE;
     this.route = route; this.p = path; this.lay = lay;
     this.theme = THEMES[route.theme] || THEMES.mumbai;
+    if (theme_water(this.theme)) this._waterColor = theme_water(this.theme);
     if (this.world) { this.scene.remove(this.world); this.world.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
     this.world = new T.Group();
     this.scene.add(this.world);
@@ -175,6 +178,7 @@ class R3D {
     for (const vd of lay.viaducts) this._viaduct(vd, path);
     for (const cx of lay.crossings) this._crossing(cx, path);
     this._poles(lay.poles, path, route);
+    this._water(lay.water || [], path);
     this._props(lay, path);
     this._kmPosts(lay.milestones, path);
     this._nameboards(lay.platforms, path);
@@ -299,6 +303,21 @@ class R3D {
         tower.position.set(q.x + pf.len * 0.36, q.y + 3.1, q.z + dz); g.add(tower);
       }
     }
+    /* platform lamps every ~40 m */
+    {
+      const nL = Math.max(2, Math.floor(pf.len / 40));
+      for (let i = 0; i < nL; i++) {
+        const lx = q.x - pf.len / 2 + (i + 0.5) * (pf.len / nL);
+        const post = new T.Mesh(new T.CylinderGeometry(0.06, 0.09, 5.2, 5), this.mat('#3c4148'));
+        post.position.set(lx, q.y + 0.9 + 2.6, q.z + 8.9);
+        this.world.add(post);
+        if (!this._lampMats) this._lampMats = [];
+        const head = new T.Mesh(new T.SphereGeometry(0.2, 6, 6), new T.MeshBasicMaterial({ color: 0xfff2cc, transparent: true, opacity: 0.15 }));
+        head.position.set(lx, q.y + 0.9 + 5.3, q.z + 8.9);
+        this.world.add(head);
+        this._lampMats.push(head.material);
+      }
+    }
     /* waiting commuters on the platform */
     const rng = mulberry32(Math.floor(pf.km));
     const n = Math.min(46, Math.max(6, Math.floor(pf.len / 9)));
@@ -314,6 +333,48 @@ class R3D {
     this._crowdColors(body, n, rng);
     this.world.add(body, heads);
     this.world.add(g);
+    if (!this._walkers) this._walkers = [];
+    this._walkers.push({
+      im: body, n, x0: q.x, y: q.y + 0.9 + 0.55, z: q.z + 4.4 + 1.6,
+      span: Math.min(pf.len * 0.8, 180),
+      speed: Array.from({ length: n }, () => 0.5 + rng() * 0.9),
+      off: Array.from({ length: n }, () => rng() * 100),
+      M: new THREE.Matrix4(),
+    });
+  }
+
+  _water(list, path) {
+    /* sea/river planes hugging the route, just under the rail grade */
+    const T = THREE;
+    if (!this.waterMat) this.waterMat = new T.MeshLambertMaterial({ color: 0x2f7f9e, emissive: 0x123244 });
+    if (this._waterColor) this.waterMat.color.set(this._waterColor);
+    for (const wseg of list) {
+      const a = clamp(wseg.a, 0, path.L), b = clamp(wseg.b, 0, path.L);
+      if (b - a < 800) continue;
+      const n = Math.max(4, Math.floor((b - a) / 400));
+      const g = new T.Group();
+      for (let i = 0; i < n; i++) {
+        const m0 = a + ((b - a) * i) / n, m1 = a + ((b - a) * (i + 1)) / n;
+        const mid = (m0 + m1) / 2;
+        const q = WB.posAt(path, mid, 0);
+        const plane = new T.Mesh(new T.PlaneGeometry((m1 - m0) + 80, 3400), this.waterMat);
+        plane.rotateX(-Math.PI / 2);
+        plane.rotateZ(-q.yaw);
+        plane.position.set(mid, q.y - 5.5, q.z + wseg.side * 1720);
+        g.add(plane);
+      }
+      this.world.add(g);
+    }
+  }
+
+  updateNightGlow(day) {
+    const lit = clamp(1 - day * 2.2, 0, 1);
+    if (this._windowGlows) for (const m of this._windowGlows) m.opacity = lit * 0.92;
+    if (this._lampMats) for (const m of this._lampMats) m.opacity = 0.15 + lit * 0.85;
+  }
+
+  animateWater(t) {
+    if (this.waterMat) this.waterMat.emissive.setHex(0x123244).multiplyScalar(0.9 + 0.1 * Math.sin(t * 1.7));
   }
 
   _kmPosts(list, path) {
@@ -609,6 +670,14 @@ class R3D {
       for (const s of [-(W / 2 + 0.03), W / 2 + 0.03]) {
         const win = new T.Mesh(new T.BoxGeometry(c.len * 0.86, H * 0.22, 0.06), this.mat('#16202a'));
         win.position.set(0, 1.5 + H * 0.62, s); car.add(win);
+        const glow = new T.Mesh(new T.BoxGeometry(c.len * 0.86, H * 0.2, 0.07),
+          new T.MeshBasicMaterial({ color: 0xffe9b0 }));
+        glow.position.copy(win.position);
+        glow.material.transparent = true;
+        glow.material.opacity = 0; /* lit at night */
+        car.add(glow);
+        if (!this._windowGlows) this._windowGlows = [];
+        this._windowGlows.push(glow.material);
       }
       for (const bx of [-c.len * 0.32, c.len * 0.32]) {
         const bog = new T.Mesh(new T.BoxGeometry(2.6, 0.7, W * 0.86), this.mat('#23262b'));
