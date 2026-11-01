@@ -49,6 +49,13 @@ class R3D {
   }
   mat(c, opts) { return new THREE.MeshLambertMaterial(Object.assign({ color: c }, opts || {})); }
 
+  scaleUV(geo, su, sv) {
+    const uv = geo.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+    uv.needsUpdate = true;
+    return geo;
+  }
+
   loadTex(name, rx, ry) {
     const t = new THREE.TextureLoader().load('tex/' + name + '.jpg');
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -285,7 +292,7 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
     const g = new T.Group();
     const h = 0.9;
     if (!this.concreteTex) this.concreteTex = this.loadTex('concrete', 1, 1);
-    const slab = new T.Mesh(new T.BoxGeometry(pf.len, h, 7), new T.MeshLambertMaterial({ color: 0xcfcabd, map: this.concreteTex }));
+    const slab = new T.Mesh(this.scaleUV(new T.BoxGeometry(pf.len, h, 7), pf.len / 2.5, 7 / 2.5), new T.MeshLambertMaterial({ color: 0xcfcabd, map: this.concreteTex }));
     slab.castShadow = true; slab.receiveShadow = true;
     slab.position.set(q.x, q.y + h / 2, q.z + 5.4); g.add(slab);
     const edge = new T.Mesh(new T.BoxGeometry(pf.len, 0.1, 0.5), this.mat('#d8d4c8'));
@@ -295,8 +302,9 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
     yline.position.set(q.x, q.y + h + 0.03, q.z + 5.4 - 2.1); g.add(yline);
     /* full-length canopy with rib posts */
     const rl = pf.len * 0.94;
-    if (!this.roofTex) this.roofTex = this.loadTex('roof', 6, 1);
-    const roof = new T.Mesh(new T.BoxGeometry(rl, 0.26, 6.4), new T.MeshLambertMaterial({ color: 0xb33a2f, map: this.roofTex }));
+    if (!this.roofTex) this.roofTex = this.loadTex('roof', 1, 1);
+    const roofGeo = this.scaleUV(new T.BoxGeometry(rl, 0.26, 6.4), rl / 2.6, 6.4 / 2.6);
+    const roof = new T.Mesh(roofGeo, new T.MeshLambertMaterial({ color: 0xb33a2f, map: this.roofTex }));
     roof.position.set(q.x, q.y + 4.35, q.z + 6.4); roof.castShadow = true; g.add(roof);
     const nRib = Math.max(2, Math.floor(rl / 14));
     const rib = new T.InstancedMesh(new T.BoxGeometry(0.24, 3.5, 0.24), this.mat('#4c5158'), nRib);
@@ -731,35 +739,24 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
 
   buildTrain(def, isPlayer) {
     const T = THREE;
-    const LIV = { wr_violet: ['#e9e2d2', '#5c3a8e'], cr_crimson: ['#8c2438', '#e8ddc0'], ch_green: ['#e9e2d2', '#1d6b4a'], kol_blue: ['#e9e2d2', '#2a4d9b'], memu: ['#e9e2d2', '#3a5fa8'], dmu: ['#b8c4cc', '#3a5fa8'], wdp4d: ['#d84b27', '#f5e9d8'], wdg4: ['#3a6ec2', '#f2c518'], wap7: ['#e8e6e0', '#c23b2e'], lhb: ['#41598f', '#dfe3e8'], icf: ['#7c2436', '#e8ddc0'], vb: ['#eceef2', '#1e3a8a'], nmr: ['#2b3d8f', '#e8c34a'], boxn: ['#8a6a4e', '#6a4e38'] };
+    const LIV = { wr_violet: ['#5e4a9c', '#efe9da'], cr_crimson: ['#9e2436', '#efe9da'], ch_green: ['#dde4d8', '#1d6b4a'], kol_blue: ['#dde4d8', '#2a4d9b'], memu: ['#35569b', '#efe9da'], dmu: ['#8ba3b5', '#3a5fa8'], wdp4d: ['#d84b27', '#f5e9d8'], wdg4: ['#3a6ec2', '#f2c518'], wap7: ['#e8e6e0', '#c23b2e'], lhb: ['#41598f', '#dfe3e8'], icf: ['#7c2436', '#e8ddc0'], vb: ['#eceef2', '#1e3a8a'], nmr: ['#2b3d8f', '#e8c34a'], boxn: ['#8a6a4e', '#6a4e38'] };
     const grp = new T.Group();
     const cars = [];
     def.cars.forEach((c, i) => {
       const car = new T.Group();
-      const [body, band] = LIV[c.livery] || ['#9aa0a6', '#d0d4d8'];
+      const emuLiv = { mumbai: 'wr_violet', mumbai_cr: 'cr_crimson', chennai: 'ch_green', kolkata: 'kol_blue' }[this.route.theme] || 'memu';
+      const [body, band] = LIV[c.livery || (['dtc', 'mc', 'tc'].includes(c.k) ? emuLiv : null)] || LIV[emuLiv];
       const H = { dtc: 3.4, mc: 3.4, tc: 3.3, 'memu-m': 3.5, 'dmu-p': 3.5, 'loco-e': 3.9, 'loco-d': 4.0, wdg4: 4.1, steam: 3.2, tender: 2.6, ac1: 3.6, ac2: 3.6, ac3: 3.6, sl: 3.6, gs: 3.6, pc: 3.6, dq: 3.5, vb: 3.5, rack: 2.9, boxn: 3.0, flat: 1.6, tank: 3.2 }[c.k] || 3.4;
       const W = 3.1;
       if (!this.trainTex) this.trainTex = this.loadTex('trainmetal', 1, 1);
-      const bm = new T.Mesh(this.carBodyGeo(c.len, H, W), new T.MeshLambertMaterial({ color: body, map: this.trainTex }));
+      if (!this._lmat) this._lmat = {};
+      const mk = (col) => (this._lmat[col] = this._lmat[col] || new T.MeshLambertMaterial({ color: col, map: this.trainTex }));
+      const driveEnd = ['dtc', 'memu-d', 'dmu-p'].includes(c.k);
+      const bm = new T.Mesh(this.carBodyGeo(c.len, H, W),
+        [mk(driveEnd ? '#e3aa2f' : body), mk(body)]); /* caps = cab ends */
       bm.castShadow = true; bm.receiveShadow = true; car.add(bm);
-      /* sloped cab nose on driving ends */
-      const cabEnd = i === 0 || i === def.cars.length - 1;
-      if (cabEnd && ['dtc', 'loco-e', 'loco-d', 'wdg4', 'steam', 'memu-d', 'dmu-p'].includes(c.k)) {
-        const nose = new T.Mesh(new T.BufferGeometry(), this.mat(body));
-        const ng = new T.BufferGeometry();
-        const hw = W / 2 - 0.2, top = 1.5 + H - 0.9, front = c.len / 2;
-        const v = new Float32Array([
-          front - 1.15, 1.5, -hw,  front - 1.15, 1.5, hw,  front - 0.05, top, hw,
-          front - 1.15, 1.5, -hw,  front - 0.05, top, hw,  front - 0.05, top, -hw,
-        ]);
-        ng.setAttribute('position', new T.BufferAttribute(v, 3));
-        ng.computeVertexNormals();
-        nose.geometry = ng;
-        nose.castShadow = true;
-        car.add(nose);
-      }
-      const bnd = new T.Mesh(new T.BoxGeometry(c.len * 1.001, H * 0.16, W + 0.04), this.mat(band));
-      bnd.position.y = 1.5 + H * 0.3; car.add(bnd);
+      const cabEnd = i === 0 || i === def.cars.length - 1; /* cab end faces are the yellow caps */      const bnd = new T.Mesh(new T.BoxGeometry(c.len * 1.001, H * 0.2, W + 0.05), this.mat(band));
+      bnd.position.y = 1.5 + H * 0.26; car.add(bnd);
       for (const s of [-(W / 2 + 0.03), W / 2 + 0.03]) {
         const win = new T.Mesh(new T.BoxGeometry(c.len * 0.86, H * 0.22, 0.06), this.mat('#16202a'));
         win.position.set(0, 1.5 + H * 0.62, s); car.add(win);
