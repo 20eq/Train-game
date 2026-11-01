@@ -36,6 +36,8 @@ class R3D {
     this._sigMats = {};
     this._onResize();
     window.addEventListener('resize', () => this._onResize());
+    this.buildCab();
+    this.scene.add(this.camera); /* camera children (cab) must be in the graph to render */
   }
   _onResize() {
     const w = window.innerWidth, h = window.innerHeight;
@@ -666,10 +668,33 @@ class R3D {
   }
 
   /* ================= environment per frame ================= */
+  buildCab() {
+    /* minimal cab: console + window frame posts, added to camera-space once */
+    const T = THREE;
+    this.cab = new T.Group();
+    const desk = new T.Mesh(new T.BoxGeometry(1.5, 0.34, 0.4), this.mat('#26292e'));
+    desk.position.set(0.25, -0.78, -1.15);
+    this.cab.add(desk);
+    const screen = new T.Mesh(new T.BoxGeometry(0.42, 0.26, 0.03), new T.MeshBasicMaterial({ color: 0x0e1a26 }));
+    screen.position.set(0.25, -0.62, -1.28);
+    this.cab.add(screen);
+    for (const s of [-1, 1]) {
+      const post = new T.Mesh(new T.BoxGeometry(0.08, 1.35, 0.08), this.mat('#33373d'));
+      post.position.set(s * 1.28, 0.1, -1.3);
+      this.cab.add(post);
+    }
+    const roof = new T.Mesh(new T.BoxGeometry(2.6, 0.08, 0.6), this.mat('#2b2f34'));
+    roof.position.set(0, 0.74, -1.2);
+    this.cab.add(roof);
+    this.camera.add(this.cab);
+    this.cab.visible = false;
+  }
+
   setCabView(inCab) {
     /* no interior is modelled: hide the lead car's exterior in cab view */
     if (this.lampMesh) this.lampMesh.visible = !inCab;
     if (this.playerHandle) this.playerHandle.cars[0].visible = !inCab;
+    if (this.cab) this.cab.visible = !!inCab;
   }
 
   followSun(focus) {
