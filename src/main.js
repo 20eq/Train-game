@@ -201,6 +201,8 @@ const App = {
     this.r3d.animateRain(dtRaw, this.r3d.camera.position);
     this.r3d.animateWater(this.t);
     this.r3d.updateNightGlow(this.r3d._day == null ? 1 : this.r3d._day);
+    const plv = this.game.player;
+    if (plv) { Snd.clatter(dtRaw, Math.abs(plv.v)); Snd.squeal(dtRaw, plv.brakeCmd || 0, Math.abs(plv.v)); }
     this.r3d.updateCrowdWalk(this.t, this.t);
     this.r3d.animateClouds(dtRaw, this.r3d.camera.position);
     this.r3d.render(this.r3d.camera);

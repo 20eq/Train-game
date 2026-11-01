@@ -88,6 +88,31 @@ const Snd = {
       window.speechSynthesis.speak(u);
     } catch (e) { /* TTS unavailable — silent */ }
   },
+  /* rail joint clatter: da-dun... da-dun, rate follows speed */
+  _clatT: 0, _clatPhase: 0,
+  clatter(dt, v) {
+    if (!this.ready || this.muted || v < 2) return;
+    const gap = Math.max(0.55, 46 / Math.max(v, 3)); /* joint every ~46 m */
+    this._clatT += dt;
+    if (this._clatT >= gap) {
+      this._clatT = 0;
+      const g = Math.min(0.05, 0.014 + v * 0.0012);
+      this._blip(95, 0.05, g * 0.9, 'triangle');
+      setTimeout(() => this._blip(70, 0.07, g, 'triangle'), 95); /* the trailing bogie thud */
+    }
+  },
+  /* brake squeal while braking hard above walking pace */
+  _sqT: 0,
+  squeal(dt, brake, v) {
+    if (!this.ready || this.muted) return;
+    if (brake > 0.5 && v > 3) {
+      this._sqT -= dt;
+      if (this._sqT <= 0) {
+        this._sqT = 0.35 + Math.random() * 0.5;
+        this._blip(2700 + Math.random() * 900, 0.22, 0.012, 'sine');
+      }
+    }
+  },
   /* three-note door chime, then guard's whistle */
   doorChime() { this._blip(988, 0.12, 0.07, 'sine'); setTimeout(() => this._blip(1319, 0.12, 0.07, 'sine'), 140); setTimeout(() => this._blip(988, 0.2, 0.07, 'sine'), 280); },
   whistle() {

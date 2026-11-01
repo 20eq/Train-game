@@ -277,6 +277,7 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
     this._water(lay.water || [], path);
     this._props(lay, path);
     this._kmPosts(lay.milestones, path);
+    this._whistleBoards(lay, path);
     this._nameboards(lay.platforms, path);
     this._signals(svc);
   }
@@ -401,9 +402,17 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
     if (pf.len >= 240) {
       const deck = new T.Mesh(new T.BoxGeometry(2.6, 0.24, 16), this.mat('#8a8f96'));
       deck.position.set(q.x, q.y + 6.2, q.z + 3.5); deck.castShadow = true; g.add(deck);
-      for (const dz of [-4.2, 11.2]) {
+      for (const rz of [3.5 - 8 + 0.35, 3.5 + 8 - 0.35]) { /* railings both edges */
+        const rail = new T.Mesh(new T.BoxGeometry(2.6, 0.09, 0.09), this.mat('#4c5158'));
+        rail.position.set(q.x, q.y + 6.85, q.z + rz); g.add(rail);
+      }
+      for (const dz of [-4.2, 11.2]) { /* stair towers UNDER the deck ends */
         const tower = new T.Mesh(new T.BoxGeometry(3, 6.2, 2.4), this.mat('#9aa0a8'));
-        tower.position.set(q.x + pf.len * 0.36, q.y + 3.1, q.z + dz); g.add(tower);
+        tower.position.set(q.x, q.y + 3.1, q.z + dz); tower.castShadow = true; g.add(tower);
+        for (const sx of [-0.9, 0.9]) { /* stair slot windows */
+          const slot = new T.Mesh(new T.BoxGeometry(0.5, 4.4, 0.1), this.mat('#2a2f36'));
+          slot.position.set(q.x + sx, q.y + 3.1, q.z + dz + (dz < 0 ? 1.22 : -1.22)); g.add(slot);
+        }
       }
     }
     /* platform lamps every ~40 m */
@@ -529,6 +538,29 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
     if (this.waterMat) this.waterMat.emissive.setHex(0x123244).multiplyScalar(0.9 + 0.1 * Math.sin(t * 1.7));
   }
 
+  /* whistle + caution boards: W before every station approach, LW at the last one */
+  _whistleBoards(lay, path) {
+    const T = THREE, cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 128;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#f4f0e6'; ctx.fillRect(0, 0, 128, 128);
+    ctx.strokeStyle = '#c8331f'; ctx.lineWidth = 10; ctx.strokeRect(6, 6, 116, 116);
+    ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 74px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('W', 64, 92);
+    const tex = new T.CanvasTexture(cv);
+    for (const pf of lay.platforms) {
+      for (const [dm, off] of [[820, -3.6], [420, -3.6]]) {
+        const m = Math.max(50, pf.km - dm);
+        const q = WB.posAt(path, m, off);
+        const b = new T.Mesh(new T.PlaneGeometry(1.15, 1.15), new T.MeshBasicMaterial({ map: tex, side: T.DoubleSide }));
+        b.position.set(q.x, q.y + 2.3, q.z);
+        const p = new T.Mesh(new T.BoxGeometry(0.1, 2.3, 0.1), this.mat('#5a5f66'));
+        p.position.set(q.x, q.y + 1.15, q.z);
+        this.world.add(b, p);
+      }
+    }
+  }
+
   _kmPosts(list, path) {
     if (!list || !list.length) return;
     const T = THREE;
@@ -544,21 +576,30 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
 
   _nameboards(platforms, path) {
     const T = THREE, cv = document.createElement('canvas');
-    cv.width = 512; cv.height = 128;
+    cv.width = 512; cv.height = 170;
     const ctx = cv.getContext('2d');
+    const devanagari = { mumbai: 1, mumbai_cr: 1, konkan: 1, deccan: 1, nilgiri: 0, chennai: 0, kolkata: 0 };
+    const REG = {
+      mumbai: (n) => ({ hi: { 'Borivali': 'बोरीवली', 'Virar': 'विरार', 'Dahisar': 'दहिसर', 'Mumbai Central': 'मुंबई सेंट्रल', 'Bandra': 'बांद्रा', 'Andheri': 'अंधेरी', 'Bhayandar': 'भायंदर', 'Vasai': 'वसई', 'Dadar': 'दादर', 'Khar': 'खार' }[n] || '' }),
+      mumbai_cr: (n) => ({ hi: { 'Kalyan': 'कल्याण', 'Thane': 'ठाणे', 'Dadar': 'दादर', 'CST': 'सीएसएमटी', 'Mulund': 'मुलुंड', 'Bhandup': 'भांडुप', 'Ghatkopar': 'घाटकोपर' }[n] || '' }),
+    };
     for (const pf of platforms) {
       const q = WB.posAt(path, pf.km, 11); /* metres */
-      ctx.clearRect(0, 0, 512, 128);
-      ctx.fillStyle = '#11304f'; ctx.fillRect(0, 0, 512, 128);
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 54px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(pf.n.slice(0, 20), 256, 58);
-      ctx.font = '34px sans-serif'; ctx.fillStyle = '#ffd76e';
-      ctx.fillText((pf.loc || '').slice(0, 18), 256, 106);
+      ctx.clearRect(0, 0, 512, 170);
+      ctx.fillStyle = '#11304f'; ctx.fillRect(0, 0, 512, 170);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 50px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(pf.n.slice(0, 20), 256, 52);
+      const thm = this.route ? this.route.theme : 'mumbai';
+      const reg = (REG[thm] && REG[thm](pf.n).hi) || '';
+      ctx.font = '38px sans-serif'; ctx.fillStyle = '#ffd76e';
+      if (reg) ctx.fillText(reg, 256, 102);
+      ctx.font = '28px sans-serif'; ctx.fillStyle = '#cfe0f2';
+      ctx.fillText((pf.loc || '').slice(0, 18).toUpperCase(), 256, reg ? 148 : 120);
       const tex = new T.CanvasTexture(cv);
-      const board = new T.Mesh(new T.PlaneGeometry(7, 1.75), new T.MeshBasicMaterial({ map: tex, side: T.DoubleSide }));
-      board.position.set(q.x, q.y + 3.6, q.z);
-      const post = new T.Mesh(new T.BoxGeometry(0.22, 3.8, 0.22), this.mat('#3c4148'));
-      post.position.set(q.x, q.y + 1.9, q.z);
+      const board = new T.Mesh(new T.PlaneGeometry(7, 2.3), new T.MeshBasicMaterial({ map: tex, side: T.DoubleSide }));
+      board.position.set(q.x, q.y + 3.9, q.z);
+      const post = new T.Mesh(new T.BoxGeometry(0.22, 4.2, 0.22), this.mat('#3c4148'));
+      post.position.set(q.x, q.y + 2.1, q.z);
       this.world.add(board, post);
     }
   }
