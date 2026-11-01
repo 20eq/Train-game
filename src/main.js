@@ -178,6 +178,7 @@ const App = {
     this.r3d.setDayNight(this.tod);
     this.r3d.setWeather(this.rain);
     this.r3d.updateSignals(this.game.box);
+    this.r3d.followSun(this.r3d.camera.position);
     this.r3d.updateTrainVisuals(this.game, this.handles);
     this.r3d.setCabView(this.camMode === 0); /* after visuals: overrides lead-car visibility */
     this.placeCamera(dtRaw);

@@ -10,11 +10,21 @@ class R3D {
     const T = THREE;
     this.renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.outputColorSpace = T.SRGBColorSpace;
+    this.renderer.toneMapping = T.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = T.PCFSoftShadowMap;
     this.scene = new T.Scene();
     this.camera = new T.PerspectiveCamera(62, 1, 0.5, 9000);
-    this.hemi = new T.HemisphereLight(0xbfd6e8, 0x6a6f5a, 0.9);
-    this.sun = new T.DirectionalLight(0xfff2dc, 1.6);
+    this.hemi = new T.HemisphereLight(0xbfd6e8, 0x7a7458, 0.55);
+    this.sun = new T.DirectionalLight(0xfff2dc, 1.35);
     this.sun.position.set(600, 900, 300);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    const sc = this.sun.shadow.camera;
+    sc.near = 100; sc.far = 2600; sc.left = -450; sc.right = 450; sc.top = 450; sc.bottom = -450;
+    this.sun.shadow.bias = -0.0004;
     this.scene.add(this.hemi, this.sun, this.sun.target);
     this.moon = new T.DirectionalLight(0x9db4e8, 0);
     this.moon.position.set(-500, 700, -300);
@@ -47,10 +57,11 @@ class R3D {
 
     /* ---------- terrain: one merged vertex-coloured mesh ---------- */
     const tf = this.tf = WB.makeTerrainFn(route, path);
+    const fbmPatch = (a, b) => WB.fbm2(a, b); /* keep WB bound */
     const step = path.L > 120000 ? 56 : 34, half = 760, across = 30;
     const nx = Math.floor(path.L / step) + 1, nz = across;
     const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3);
-    const cLow = new T.Color(this.theme.ground), cSoil = new T.Color(this.theme.soil || this.theme.ground);
+    const cLow = new T.Color(this.theme.ground).multiplyScalar(0.8), cSoil = new T.Color(this.theme.soil || this.theme.ground).multiplyScalar(0.85);
     const cHigh = new T.Color('#8e8676'), cGreen = new T.Color('#6f8757');
     const nilgiri = route.theme === 'nilgiri';
     for (let ix = 0; ix < nx; ix++) {
@@ -63,6 +74,10 @@ class R3D {
         pos[k] = x; pos[k + 1] = h; pos[k + 2] = zc;
         const t = clamp((h - y0) / 90, 0, 1);
         const c = cLow.clone().lerp(cSoil, 0.4 + 0.3 * Math.sin(x * 0.002 + z * 0.01) ** 2).lerp(cHigh, t * t).lerp(cGreen, nilgiri ? 0.45 * (1 - t) : 0.18 * (1 - t));
+        /* patchy grass/earth variation so the ground never reads as one flat plane */
+        const patch = fbmPatch(x / 90 + z / 130, x / 47 - z / 71);
+        c.lerp(cGreen, clamp(0.22 + patch * 0.5, 0, 0.72) * (1 - t * 0.7));
+        c.multiplyScalar(0.86 + 0.28 * fbmPatch(x / 17 + 40, z / 23 - 15));
         col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
       }
     }
@@ -75,7 +90,9 @@ class R3D {
     tg.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
     tg.setAttribute('color', new T.Float32BufferAttribute(col, 3));
     tg.setIndex(idx); tg.computeVertexNormals();
-    this.world.add(new T.Mesh(tg, new T.MeshLambertMaterial({ vertexColors: true })));
+    const terrMesh = new T.Mesh(tg, new T.MeshLambertMaterial({ vertexColors: true }));
+    terrMesh.receiveShadow = true;
+    this.world.add(terrMesh);
 
     /* distant skirts: coarse rows of the SAME terrain fn beyond the detailed strip
        (row 0 = the strip edge, so the seam is seamless by construction) */
@@ -84,7 +101,7 @@ class R3D {
       const xStep = Math.max(step * 6, 180);
       const nx2 = Math.floor(path.L / xStep) + 1;
       const sp = [], sc2 = [], si = [];
-      const base = new T.Color(this.theme.ground), high2 = new T.Color('#857c6c');
+      const base = new T.Color(this.theme.ground).multiplyScalar(0.8), high2 = new T.Color('#857c6c');
       const hazeC = new T.Color('#aab6ae');
       const jit = fbm(hashStr(route.id + '-skirt'), 3);
       const VI = (ix, side, ri) => ix * 2 * rows.length + (side < 0 ? rows.length : 0) + ri; /* matches push order */
@@ -116,7 +133,9 @@ class R3D {
       sg.setAttribute('position', new T.Float32BufferAttribute(sp, 3));
       sg.setAttribute('color', new T.Float32BufferAttribute(sc2, 3));
       sg.setIndex(si); sg.computeVertexNormals();
-      this.world.add(new T.Mesh(sg, new T.MeshLambertMaterial({ vertexColors: true })));
+      const skm = new T.Mesh(sg, new T.MeshLambertMaterial({ vertexColors: true }));
+      skm.receiveShadow = true;
+      this.world.add(skm);
     }
 
     /* endless under-plane: guarantees land everywhere the strip doesn't reach */
@@ -125,7 +144,8 @@ class R3D {
       for (let i = 0; i < path.N; i += 8) eMin = Math.min(eMin, path.ys[i]);
       const pg = new T.PlaneGeometry(80000, 80000);
       pg.rotateX(-Math.PI / 2);
-      const pm = new T.Mesh(pg, new T.MeshLambertMaterial({ color: new T.Color('#9aa79a').lerp(new T.Color(this.theme.ground), 0.35) }));
+      const pm = new T.Mesh(pg, new T.MeshLambertMaterial({ color: new T.Color('#8ba084').lerp(new T.Color(this.theme.ground), 0.3).multiplyScalar(0.82) }));
+      pm.receiveShadow = true;
       pm.position.set(path.L / 2, eMin - 30, 0);
       this.world.add(pm);
     }
@@ -201,7 +221,9 @@ class R3D {
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
     g.setIndex(idx); g.computeVertexNormals();
-    return new T.Mesh(g, this.mat(color));
+    const mesh = new T.Mesh(g, this.mat(color));
+    mesh.receiveShadow = true;
+    return mesh;
   }
 
   _sleepers(path, offFn) {
@@ -224,6 +246,7 @@ class R3D {
     const g = new T.Group();
     const h = 0.9;
     const slab = new T.Mesh(new T.BoxGeometry(pf.len, h, 7), this.mat('#9a958c'));
+    slab.castShadow = true; slab.receiveShadow = true;
     slab.position.set(q.x, q.y + h / 2, q.z + 5.4); g.add(slab);
     const edge = new T.Mesh(new T.BoxGeometry(pf.len, 0.1, 0.5), this.mat('#d8d4c8'));
     edge.position.set(q.x, q.y + h + 0.05, q.z + 5.4 - 3.2); g.add(edge);
@@ -365,7 +388,9 @@ class R3D {
         const h = this.tf ? this.tf(q.x, q.z) : q.y;
         v.set(q.x, h + 1.3, q.z); q4.setFromAxisAngle(up, p.rot); s1.set(1, 1, 1);
         M.compose(v, q4, s1); trunk.setMatrixAt(i, M);
+      trunk.castShadow = true;
         v.set(q.x, h + (palm ? 4.4 : 4.6), q.z); s1.set(p.s, p.s * (palm ? 0.8 : 1), p.s);
+        crown.castShadow = true;
         M.compose(v, q4, s1); crown.setMatrixAt(i, M);
       });
       s1.set(1, 1, 1);
@@ -373,6 +398,7 @@ class R3D {
     }
     if (blds.length) {
       const im = new T.InstancedMesh(new T.BoxGeometry(9, 7, 9), new T.MeshLambertMaterial({ vertexColors: false, color: 0xb0a694 }), blds.length);
+      im.castShadow = true; im.receiveShadow = true;
       blds.forEach((p, i) => {
         const q = WB.posAt(path, p.m, p.z);
         const h = this.tf ? this.tf(q.x, q.z) : q.y;
@@ -423,6 +449,28 @@ class R3D {
   }
 
   /* ================= trains ================= */
+  /* one extruded, bevelled body per unique size — every train reuses it */
+  carBodyGeo(len, H, W) {
+    const T = THREE, key = len + 'x' + H + 'x' + W;
+    if (!this._carGeo) this._carGeo = {};
+    if (this._carGeo[key]) return this._carGeo[key];
+    const s = new T.Shape();
+    const w = W / 2, r = Math.min(0.55, H * 0.22);
+    s.moveTo(-w, 0);
+    s.lineTo(-w, H - 1.1);                       /* side wall */
+    s.quadraticCurveTo(-w, H, -w + 0.75, H + r * 0.35);  /* shoulder */
+    s.quadraticCurveTo(0, H + r, w - 0.75, H + r * 0.35); /* curved roof */
+    s.quadraticCurveTo(w, H, w, H - 1.1);
+    s.lineTo(w, 0);
+    s.closePath();
+    const g = new T.ExtrudeGeometry(s, { depth: len, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.22, bevelSegments: 2, steps: 1 });
+    g.rotateY(Math.PI / 2);            /* extrude along -X so head sits at +len */
+    g.translate(-len / 2, 1.5, 0);     /* centre like the old box */
+    g.computeVertexNormals();
+    this._carGeo[key] = g;
+    return g;
+  }
+
   _crowdColors(im, n, rng) {
     const cols = [0xd8d3c8, 0x9fb3c8, 0xc8a8b8, 0xb8c4a8, 0xe0d8c0, 0x8ea6b8, 0xd6c2a0, 0xc07870];
     for (let i = 0; i < n; i++) im.setColorAt(i, new THREE.Color(cols[Math.floor(rng() * cols.length)]));
@@ -460,8 +508,24 @@ class R3D {
       const [body, band] = LIV[c.livery] || ['#9aa0a6', '#d0d4d8'];
       const H = { dtc: 3.4, mc: 3.4, tc: 3.3, 'memu-m': 3.5, 'dmu-p': 3.5, 'loco-e': 3.9, 'loco-d': 4.0, wdg4: 4.1, steam: 3.2, tender: 2.6, ac1: 3.6, ac2: 3.6, ac3: 3.6, sl: 3.6, gs: 3.6, pc: 3.6, dq: 3.5, vb: 3.5, rack: 2.9, boxn: 3.0, flat: 1.6, tank: 3.2 }[c.k] || 3.4;
       const W = 3.1;
-      const bm = new T.Mesh(new T.BoxGeometry(c.len, H, W), this.mat(body));
-      bm.position.y = 1.5 + H / 2; car.add(bm);
+      const bm = new T.Mesh(this.carBodyGeo(c.len, H, W), this.mat(body));
+      bm.castShadow = true; bm.receiveShadow = true; car.add(bm);
+      /* sloped cab nose on driving ends */
+      const cabEnd = i === 0 || i === def.cars.length - 1;
+      if (cabEnd && ['dtc', 'loco-e', 'loco-d', 'wdg4', 'steam', 'memu-d', 'dmu-p'].includes(c.k)) {
+        const nose = new T.Mesh(new T.BufferGeometry(), this.mat(body));
+        const ng = new T.BufferGeometry();
+        const hw = W / 2 - 0.2, top = 1.5 + H - 0.9, front = c.len / 2;
+        const v = new Float32Array([
+          front - 1.15, 1.5, -hw,  front - 1.15, 1.5, hw,  front - 0.05, top, hw,
+          front - 1.15, 1.5, -hw,  front - 0.05, top, hw,  front - 0.05, top, -hw,
+        ]);
+        ng.setAttribute('position', new T.BufferAttribute(v, 3));
+        ng.computeVertexNormals();
+        nose.geometry = ng;
+        nose.castShadow = true;
+        car.add(nose);
+      }
       const bnd = new T.Mesh(new T.BoxGeometry(c.len * 1.001, H * 0.16, W + 0.04), this.mat(band));
       bnd.position.y = 1.5 + H * 0.3; car.add(bnd);
       for (const s of [-(W / 2 + 0.03), W / 2 + 0.03]) {
@@ -527,6 +591,14 @@ class R3D {
     if (this.playerHandle) this.playerHandle.cars[0].visible = !inCab;
   }
 
+  followSun(focus) {
+    /* keep the shadow box around the player */
+    const d = this.sun.position.clone().normalize().multiplyScalar(900);
+    this.sun.position.set(focus.x + d.x, Math.max(150, focus.y + d.y), focus.z + d.z);
+    this.sun.target.position.set(focus.x, focus.y, focus.z);
+    this.sun.target.updateMatrixWorld();
+  }
+
   setDayNight(tod /* hours 0-24 */) {
     const T = THREE;
     const ang = ((tod - 6) / 24) * TAU; /* 6h sunrise east */
@@ -536,9 +608,9 @@ class R3D {
     const dusk = clamp(1 - Math.abs(elev) * 3.2, 0, 1);
     this.skyDome.material.uniforms.uDusk.value = clamp(dusk * 1.3, 0, 1);
     this.skyDome.material.uniforms.uNight.value = clamp(1 - elev * 5 - 0.2, 0, 1);
-    this.sun.intensity = 1.65 * day;
+    this.sun.intensity = 1.35 * day;
     this.sun.color.setHSL(0.09 + 0.04 * day, 0.6, 0.6 + 0.3 * day);
-    this.hemi.intensity = 0.25 + 0.75 * day;
+    this.hemi.intensity = 0.18 + 0.5 * day;
     this.moon.intensity = clamp(1 - day * 3, 0, 1) * 0.22;
     this.hemi.color.setHex(day > 0.5 ? 0xbfd6e8 : 0x36405e);
     this._stars.material.opacity = clamp(1 - day * 2.2, 0, 0.9);

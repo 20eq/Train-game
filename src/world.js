@@ -109,6 +109,12 @@ const WB = {
   },
 
   /* ---------- terrain ---------- */
+  fbm2(a, b) {
+    /* two rotated 1D noise lookups — good enough for ground patchiness */
+    const n = this._n2 || (this._n2 = [fbm(hashStr('patch-x'), 3), fbm(hashStr('patch-y'), 3)]);
+    return 0.5 + 0.25 * (n[0](a) + n[1](b));
+  },
+
   makeTerrainFn(route, p) {
     const hills = fbm(hashStr(route.id + '-t'), 4), hills2 = fbm(hashStr(route.id + '-t2'), 3);
     let eMin = Infinity, eMax = -Infinity;
