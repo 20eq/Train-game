@@ -73,6 +73,21 @@ const Snd = {
     if (dual) { mk(310, 0.16); mk(415, 0.12); } else { mk(440, 0.13); }
   },
   ding() { this._blip(1150, 0.5, 0.06, 'sine'); },
+  /* station announcements via browser speech (Indian-English voice when available) */
+  _voice: null,
+  speak(text) {
+    if (this.muted || typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      if (!this._voice) {
+        const vs = window.speechSynthesis.getVoices() || [];
+        this._voice = vs.find((v) => /en[-_]IN/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+      }
+      const u = new SpeechSynthesisUtterance(text);
+      if (this._voice) u.voice = this._voice;
+      u.rate = 1.02; u.pitch = 1.0; u.volume = 0.9;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* TTS unavailable — silent */ }
+  },
   /* three-note door chime, then guard's whistle */
   doorChime() { this._blip(988, 0.12, 0.07, 'sine'); setTimeout(() => this._blip(1319, 0.12, 0.07, 'sine'), 140); setTimeout(() => this._blip(988, 0.2, 0.07, 'sine'), 280); },
   whistle() {

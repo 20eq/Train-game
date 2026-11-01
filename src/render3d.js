@@ -151,9 +151,16 @@ class R3D {
     }
 
     /* ---------- track ---------- */
+    this.world.add(this._ribbon(path, (m) => 0, 5.6, 0.1, '#57534c'));                          // formation
     this.world.add(this._ribbon(path, (m) => 0, 3.4, 0.24, this.theme.ballast || '#6d6a63'));   // ballast
     for (const s of [-0.72, 0.72]) this.world.add(this._ribbon(path, (m) => s, 0.14, 0.42, '#7c8087')); // rails
     this.world.add(this._sleepers(path, 0));
+    if (route.double) {
+      /* second line for oncoming traffic */
+      this.world.add(this._ribbon(path, (m) => -4.9, 3.2, 0.24, this.theme.ballast || '#6d6a63'));
+      for (const s of [-5.58, -4.22]) this.world.add(this._ribbon(path, (m) => s, 0.13, 0.42, '#7c8087'));
+      this.world.add(this._sleepers(path, (m) => -4.9));
+    }
     for (const lp of lay.loops) {
       const off = (m) => WB.loopOffsetAt(lp, m) + 2.6 * Math.sign(WB.loopOffsetAt(lp, m) || 1);
       this.world.add(this._ribbon(path, off, 2.6, 0.2, this.theme.ballast || '#6d6a63'));
@@ -167,6 +174,7 @@ class R3D {
     for (const cx of lay.crossings) this._crossing(cx, path);
     this._poles(lay.poles, path, route);
     this._props(lay, path);
+    this._kmPosts(lay.milestones, path);
     this._nameboards(lay.platforms, path);
     this._signals(svc);
   }
@@ -250,17 +258,48 @@ class R3D {
     slab.position.set(q.x, q.y + h / 2, q.z + 5.4); g.add(slab);
     const edge = new T.Mesh(new T.BoxGeometry(pf.len, 0.1, 0.5), this.mat('#d8d4c8'));
     edge.position.set(q.x, q.y + h + 0.05, q.z + 5.4 - 3.2); g.add(edge);
-    if (pf.len > 90) {
-      const roof = new T.Mesh(new T.BoxGeometry(Math.min(pf.len * 0.55, 130), 0.3, 6), this.mat('#b33a2f'));
-      roof.position.set(q.x, q.y + 4.4, q.z + 6.2); g.add(roof);
-      for (const dx of [-Math.min(pf.len * 0.24, 55), 0, Math.min(pf.len * 0.24, 55)]) {
-        const post = new T.Mesh(new T.BoxGeometry(0.3, 3.6, 0.3), this.mat('#4c5158'));
-        post.position.set(q.x + dx, q.y + 2.2, q.z + 6.2); g.add(post);
+    /* iconic yellow safety line */
+    const yline = new T.Mesh(new T.BoxGeometry(pf.len, 0.04, 0.45), this.mat('#e3b52e'));
+    yline.position.set(q.x, q.y + h + 0.03, q.z + 5.4 - 2.1); g.add(yline);
+    /* full-length canopy with rib posts */
+    const rl = pf.len * 0.94;
+    const roof = new T.Mesh(new T.BoxGeometry(rl, 0.26, 6.4), this.mat('#b33a2f'));
+    roof.position.set(q.x, q.y + 4.35, q.z + 6.4); roof.castShadow = true; g.add(roof);
+    const nRib = Math.max(2, Math.floor(rl / 14));
+    const rib = new T.InstancedMesh(new T.BoxGeometry(0.24, 3.5, 0.24), this.mat('#4c5158'), nRib);
+    for (let i = 0; i < nRib; i++) {
+      const M = new T.Matrix4();
+      M.setPosition(q.x - rl / 2 + (i + 0.5) * (rl / nRib), q.y + 2.35, q.z + 6.4);
+      rib.setMatrixAt(i, M);
+    }
+    g.add(rib);
+    /* benches + vendor stalls */
+    for (const f of [-0.32, 0.1, 0.38]) {
+      const bench = new T.Mesh(new T.BoxGeometry(2.4, 0.5, 0.55), this.mat('#7c5a38'));
+      bench.position.set(q.x + f * pf.len, q.y + h + 0.25, q.z + 7.6);
+      bench.castShadow = true; g.add(bench);
+    }
+    if (pf.len > 150) {
+      for (const [f, col] of [[-0.42, '#3f7fb8'], [0.46, '#c8752f']]) {
+        const stall = new T.Mesh(new T.BoxGeometry(2.8, 2.3, 2), this.mat(col));
+        stall.position.set(q.x + f * pf.len, q.y + h + 1.15, q.z + 8.4);
+        stall.castShadow = true; g.add(stall);
+        const awn = new T.Mesh(new T.BoxGeometry(3.2, 0.12, 2.5), this.mat('#2f4f6f'));
+        awn.position.set(q.x + f * pf.len, q.y + h + 2.4, q.z + 7.8); g.add(awn);
+      }
+    }
+    /* foot over bridge at major stations */
+    if (pf.len >= 240) {
+      const deck = new T.Mesh(new T.BoxGeometry(2.6, 0.24, 16), this.mat('#8a8f96'));
+      deck.position.set(q.x, q.y + 6.2, q.z + 3.5); deck.castShadow = true; g.add(deck);
+      for (const dz of [-4.2, 11.2]) {
+        const tower = new T.Mesh(new T.BoxGeometry(3, 6.2, 2.4), this.mat('#9aa0a8'));
+        tower.position.set(q.x + pf.len * 0.36, q.y + 3.1, q.z + dz); g.add(tower);
       }
     }
     /* waiting commuters on the platform */
     const rng = mulberry32(Math.floor(pf.km));
-    const n = Math.max(4, Math.floor(pf.len / 16));
+    const n = Math.min(46, Math.max(6, Math.floor(pf.len / 9)));
     const body = new T.InstancedMesh(new T.CylinderGeometry(0.18, 0.22, 1.1, 5), this.mat('#cfcabd'), n);
     const heads = new T.InstancedMesh(new T.SphereGeometry(0.15, 6, 6), this.mat('#b98866'), n);
     const M2 = new T.Matrix4(), s2 = new T.Vector3(1, 1, 1), idq = new T.Quaternion(), v2 = new T.Vector3();
@@ -273,6 +312,19 @@ class R3D {
     this._crowdColors(body, n, rng);
     this.world.add(body, heads);
     this.world.add(g);
+  }
+
+  _kmPosts(list, path) {
+    if (!list || !list.length) return;
+    const T = THREE;
+    const im = new T.InstancedMesh(new T.BoxGeometry(0.14, 1, 0.14), this.mat('#e8e4da'), list.length);
+    const M = new T.Matrix4();
+    list.forEach((m, i) => {
+      const p = WB.posAt(path, m, -3.4);
+      M.makeTranslation(p.x, p.y + 0.5, p.z);
+      im.setMatrixAt(i, M);
+    });
+    this.world.add(im);
   }
 
   _nameboards(platforms, path) {
@@ -568,15 +620,20 @@ class R3D {
   }
 
   /* place all train visuals from game state */
+  trackOffset(tr) {
+    /* lateral world-z offset so each track is a separate line of rails */
+    if (tr.track === 'far') return this.route && this.route.double ? -4.9 : -5.6;
+    if (tr.track === 'loop') return 5.2;
+    return 0;
+  }
   updateTrainVisuals(game, handles) {
     for (const tr of game.trains) {
       const h = handles.get(tr);
       if (!h) continue;
-      const hidden = tr.track === 'far' && false;
-      tr._carIdx = tr._carIdx || 0;
+      const zOff = this.trackOffset(tr);
       h.cars.forEach((car, i) => {
         const pose = WB.carPose(this.p, tr.def, tr.s, i);
-        car.position.set(pose.x, pose.y - 1.5 + 1.5, pose.z);
+        car.position.set(pose.x, pose.y, pose.z + zOff);
         car.rotation.y = -pose.yaw;
         car.visible = !(tr.track === 'gone');
       });

@@ -27,6 +27,22 @@ const App = {
     /* train visuals */
     this.handles = new Map();
     for (const tr of this.game.trains) this.handles.set(tr, this.r3d.buildTrain(tr.def, tr === this.game.player));
+    /* parked long-distance rakes on the far line near the terminus */
+    if (this.statics) this.statics.forEach((h) => this.r3d.removeTrain(h)); /* previous run */
+    this.statics = [];
+    const parkDefs = (this.svc && this.svc.ai && this.svc.ai.opposite && this.svc.ai.opposite.trains) || ['konkan_exp', 'wdg_freight'];
+    for (let k = 0; k < 2; k++) {
+      const s = p.L - 320 - k * 420;
+      if (s < 900) break;
+      const def = TRAINS[parkDefs[k % parkDefs.length]];
+      const h = this.r3d.buildTrain(def, false);
+      h.cars.forEach((car, i) => {
+        const pose = WB.carPose(p, def, s, i);
+        car.position.set(pose.x, pose.y, pose.z - (route.double ? 4.9 : 5.6));
+        car.rotation.y = -pose.yaw;
+      });
+      this.statics.push(h);
+    }
     this._menuOff();
     this.state = 'driving';
     Snd.init(); Snd.resume();
@@ -161,7 +177,7 @@ const App = {
 
     const evs = this.game.advance(dt);
     for (const e of evs) {
-      if (e.type === 'stop') { Snd.doorChime(); this.hud(e.n + ' — ' + fmtDelay(e.delay)); }
+      if (e.type === 'stop') { Snd.doorChime(); this.hud(e.n + ' — ' + fmtDelay(e.delay)); Snd.speak(e.n + '. Doors open.'); }
       if (e.type === 'doors') { Snd.whistle(); this.hud('भरा है / khali — doors closing, stand clear'); }
       if (e.type === 'meet') { Snd.horn('emu'); this.hud('Crossing: ' + e.who + ' at ' + e.at); }
       if (e.type === 'spad' && e.who === 'You') this.hud('⚠ SPAD — signal passed at danger');
@@ -195,6 +211,7 @@ const App = {
       this._lastAnn = ann.n;
       this.hud('Next station: ' + ann.n + (ann.loc ? '  ·  ' + ann.loc : ''));
       Snd.ding();
+      Snd.speak('Next station, ' + ann.n + '.');
     }
     document.getElementById('hSpeed').textContent = (pl.v * 3.6).toFixed(0);
     document.getElementById('hLimit').textContent = (limitAt(this.route, pl.s) * 3.6).toFixed(0);
