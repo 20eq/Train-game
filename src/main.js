@@ -212,6 +212,7 @@ const App = {
       this.hud('Next station: ' + ann.n + (ann.loc ? '  ·  ' + ann.loc : ''));
       Snd.ding();
       Snd.speak('Next station, ' + ann.n + '.');
+      if (ann.loc) Snd.speak('Agla station ' + ann.loc + '.');
     }
     document.getElementById('hSpeed').textContent = (pl.v * 3.6).toFixed(0);
     document.getElementById('hLimit').textContent = (limitAt(this.route, pl.s) * 3.6).toFixed(0);

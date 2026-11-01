@@ -402,13 +402,37 @@ class R3D {
 
   _crossing(cx, path) {
     const T = THREE, q = WB.posAt(path, cx.km, 0);
-    const road = new T.Mesh(new T.BoxGeometry(7, 0.14, 13), this.mat('#5c5c58'));
-    road.position.set(q.x, q.y + 0.22, q.z);
+    const road = new T.Mesh(new T.BoxGeometry(8, 0.14, 14), this.mat('#4c4c48'));
+    road.position.set(q.x, q.y + 0.2, q.z);
     this.world.add(road);
-    for (const s of [-8, 8]) {
-      const post = new T.Mesh(new T.BoxGeometry(0.25, 2.6, 0.25), this.mat('#c8b428'));
-      post.position.set(q.x + s, q.y + 1.3, q.z + 6.4);
+    /* striped gate arms, down across the road */
+    for (const s of [-1, 1]) {
+      const post = new T.Mesh(new T.BoxGeometry(0.3, 2.8, 0.3), this.mat('#c8b428'));
+      post.position.set(q.x, q.y + 1.4, q.z + s * 6.8);
       this.world.add(post);
+      const arm = new T.Mesh(new T.BoxGeometry(7.4, 0.22, 0.22), this.mat('#d8d4c8'));
+      arm.position.set(q.x + s * 3.4, q.y + 1.05, q.z + s * 4.6);
+      arm.rotation.y = s * 0.35;
+      this.world.add(arm);
+      for (let b = -2; b <= 2; b++) { /* red stripes */
+        const st = new T.Mesh(new T.BoxGeometry(0.7, 0.24, 0.24), this.mat('#c23b2e'));
+        st.position.set(q.x + s * (3.4 + b * 1.4), q.y + 1.05 + s * b * 0.48, q.z + s * 4.6 + s * b * -0.17);
+        st.rotation.y = s * 0.35;
+        this.world.add(st);
+      }
+    }
+    /* waiting road traffic on both sides */
+    const rng = mulberry32(Math.floor(cx.km));
+    const cols = [0xb8b8c0, 0x3a5fa8, 0xc23b2e, 0xd8d8d0, 0x3c3c40];
+    const nVeh = 3 + Math.floor(rng() * 4);
+    for (let i = 0; i < nVeh; i++) {
+      const bike = rng() < 0.45;
+      const side = rng() < 0.5 ? -1 : 1;
+      const w = bike ? 0.7 : 1.9, hh = bike ? 1.2 : 1.4, l = bike ? 1.9 : 4.1;
+      const v = new T.Mesh(new T.BoxGeometry(l, hh, w), this.mat(cols[Math.floor(rng() * cols.length)]));
+      v.position.set(q.x - 9 - rng() * 22, q.y + 0.2 + hh / 2, q.z + side * (rng() * 3.4));
+      v.castShadow = true;
+      this.world.add(v);
     }
   }
 

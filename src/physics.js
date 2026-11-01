@@ -72,9 +72,11 @@ function stepTrain(tr, dt, ctx) {
   if (tr.v > vCap) { tr.v = Math.max(vCap, tr.v - 0.55 * dt); tr.a = Math.min(tr.a, 0); }
 
   const prevS = tr.s;
-  tr.s += tr.v * dt;
+  const dir = tr.dir || 1;
+  tr.s += dir * tr.v * dt;
   const end = routeEnd(r) - 40;
-  if (tr.s >= end) { tr.s = end; tr.v = 0; tr.done = true; }
+  if (dir > 0 && tr.s >= end) { tr.s = end; tr.v = 0; tr.done = true; }
+  if (dir < 0 && tr.s <= 160) { tr.v = 0; tr.done = true; } /* cleared the near end */
   /* steam chuff events by distance */
   if (d.sound === 'steam') {
     tr.chuffPhase += tr.v * dt / 4.4;

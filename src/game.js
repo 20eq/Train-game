@@ -100,10 +100,12 @@ class Game {
       this.nextOpp = lo + this.rng() * (hi - lo);
       const def = TRAINS[o.trains[Math.floor(this.rng() * o.trains.length)]];
       const tr = makeTrain(this.route, def, { s0: this.end - 250, track: 'far', label: def.name + ' (Up)' });
+      tr.dir = -1; /* true opposite direction: rushes toward the player */
+      tr.v = Math.min(def.vmax, 27 * MPS);
       this.trains.push(tr);
       this.events.push({ type: 'oncoming', who: tr.label });
     }
-    for (const t of this.trains) if (t.track === 'far' && (t.s < 150 || t.s > this.end - 250)) t.track = 'gone';
+    for (const t of this.trains) if (t.track === 'far' && t.done) t.track = 'gone';
     this.trains = this.trains.filter((t) => t.track !== 'gone');
   }
 
@@ -144,7 +146,7 @@ class Game {
     for (const tr of this.trains) prev.set(tr, stepTrain(tr, dt, { wet: this.wet }));
     for (const tr of this.trains) if (this.box.checkSpad(tr, prev.get(tr))) { this.events.push({ type: 'spad', who: tr.label }); if (tr === this.player) this.score.spads++; }
     /* AI trains that reached the terminus clear the section (platform/siding) */
-    for (const tr of this.trains) if (tr !== this.player && tr.done && tr.s >= this.end - 120) tr.track = 'gone';
+    for (const tr of this.trains) if (tr !== this.player && tr.done && (tr.dir || 1) > 0 && tr.s >= this.end - 120) tr.track = 'gone';
     this.trains = this.trains.filter((t) => t.track !== 'gone');
     /* player doors/dwell (aiDrive is bypassed for the player) */
     if (this.player.doorsOpen) {

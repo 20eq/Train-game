@@ -99,13 +99,14 @@ const WB = {
   },
 
   /* pose (world x,y,z + yaw) of car #carIdx when the train head is at m */
-  carPose(p, def, m, carIdx) {
+  carPose(p, def, m, carIdx, dir) {
     const cars = this.carOffsets(def);
     const c = cars[clamp(carIdx, 0, cars.length - 1)];
-    const cm = m - c.centre, h = c.len / 2 - 1.2;
-    const a = this.posAt(p, cm - h, 0), b = this.posAt(p, cm + h, 0);
+    const d = dir || 1;
+    const cm = m - d * c.centre, h = c.len / 2 - 1.2;
+    const a = this.posAt(p, cm - d * h, 0), b = this.posAt(p, cm + d * h, 0);
     const q = this.posAt(p, cm, 0);
-    return { x: q.x, y: q.y + 1.5, z: q.z, yaw: Math.atan2(b.z - a.z, b.x - a.x), car: c.car };
+    return { x: q.x, y: q.y + 1.5, z: q.z, yaw: Math.atan2(d * (b.z - a.z), d * (b.x - a.x)), car: c.car };
   },
 
   /* ---------- terrain ---------- */
