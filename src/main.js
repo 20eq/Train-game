@@ -271,8 +271,12 @@ function buildMenu() {
     if (!b) return;
     const r = ROUTES[b.dataset.route];
     const svc = b.dataset.svc ? r.services.find((s) => s.id === b.dataset.svc) : null;
-    App.start(r, svc, svc ? 'service' : 'freeroam');
-    if (b.dataset.auto) { App.autoDrive = true; App.camMode = 1; }
+    /* paint the loading note before the (synchronous) world build blocks the frame */
+    document.getElementById('routes').innerHTML = '<div class="route"><b>Building ' + r.title + '…</b><span>laying ' + Math.round(r.km) + ' km of track</span></div>';
+    requestAnimationFrame(() => setTimeout(() => {
+      App.start(r, svc, svc ? 'service' : 'freeroam');
+      if (b.dataset.auto) { App.autoDrive = true; App.camMode = 1; }
+    }, 30));
   });
 }
 
