@@ -49,6 +49,74 @@ class R3D {
   }
   mat(c, opts) { return new THREE.MeshLambertMaterial(Object.assign({ color: c }, opts || {})); }
 
+  mergeGeos(geos) {
+    const pos = [], norm = [], uv = [], idx = [];
+    let off = 0;
+    for (const g of geos) {
+      const p = g.getAttribute('position'), n = g.getAttribute('normal'), u = g.getAttribute('uv'), ix = g.getIndex();
+      for (let i = 0; i < p.count; i++) {
+        pos.push(p.getX(i), p.getY(i), p.getZ(i));
+        norm.push(n.getX(i), n.getY(i), n.getZ(i));
+        uv.push(u ? u.getX(i) : 0, u ? u.getY(i) : 0);
+      }
+      for (let i = 0; i < ix.count; i++) idx.push(ix.getX(i) + off);
+      off += p.count;
+    }
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g2.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+    g2.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g2.setIndex(idx);
+    return g2;
+  }
+
+  bx(w, h, d, x, y, z) { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return g; }
+
+  /* one merged dark-detail geometry per car type: windows, door recesses,
+     8 wheels, bogie detail, underframe, inter-car connectors */
+  carDetailGeo(k, len, H, W) {
+    const key = k + '|' + len + '|' + H;
+    if (!this._detailGeo) this._detailGeo = {};
+    if (this._detailGeo[key]) return this._detailGeo[key];
+    const T = THREE, parts = [];
+    const y0 = 1.5, winY = y0 + H * 0.62, winH = H * 0.24;
+    const drive = k === 'dtc' || k === 'memu-d' || k === 'dmu-p';
+    const x0 = -len / 2 + (drive ? 3.4 : 1.9), x1 = len / 2 - 1.9;
+    for (const s of [1, -1]) {
+      const z = s * (W / 2 + 0.035);
+      for (let wx = x0 + 0.9; wx + 1.35 <= x1; wx += 2.15) parts.push(this.bx(1.35, winH, 0.06, wx + 0.67, winY, z));
+      for (const dx of [len * 0.16, -len * 0.16]) parts.push(this.bx(1.15, H * 0.58, 0.05, dx, y0 + H * 0.30, z)); /* doors */
+    }
+    for (const bcx of [-len * 0.32, len * 0.32]) for (const ax of [-1.05, 1.05]) for (const s of [1, -1]) {
+      const wg = new T.CylinderGeometry(0.42, 0.42, 0.2, 10);
+      wg.rotateX(Math.PI / 2);
+      wg.translate(bcx + ax, 0.48, s * 1.06);
+      parts.push(wg);
+    }
+    for (const s of [1, -1]) parts.push(this.bx(0.7, 0.75, 1.6, s * (len / 2 + 0.1), y0 + 0.5, 0)); /* connectors */
+    parts.push(this.bx(len * 0.52, 0.55, W * 0.58, 0, y0 + 0.42, 0));                            /* underframe gear */
+    const g = this.mergeGeos(parts);
+    this._detailGeo[key] = g;
+    return g;
+  }
+
+  /* panto + roof equipment, merged, cached per car height */
+  roofGeo(len, H, panto) {
+    const key = 'roof' + len + '|' + H + (panto ? 'a' : 'b');
+    if (!this._roofGeo) this._roofGeo = {};
+    if (this._roofGeo[key]) return this._roofGeo[key];
+    const parts = [this.bx(2.4, 0.3, 1.9, len * 0.18, 1.5 + H + 0.18, 0)]; /* AC/rectifier box */
+    if (panto) {
+      parts.push(this.bx(1.2, 0.08, 1.5, -len * 0.22, 1.5 + H + 0.25, 0));  /* base frame */
+      parts.push(this.bx(1.45, 0.09, 0.1, -len * 0.22 + 0.5, 1.5 + H + 0.6, 0));  /* lower arm */
+      parts.push(this.bx(1.45, 0.09, 0.1, -len * 0.22 - 0.45, 1.5 + H + 0.95, 0)); /* upper arm */
+      parts.push(this.bx(0.18, 0.09, 1.6, -len * 0.22 - 1.05, 1.5 + H + 1.18, 0)); /* head + horns */
+    }
+    const g = this.mergeGeos(parts);
+    this._roofGeo[key] = g;
+    return g;
+  }
+
   scaleUV(geo, su, sv) {
     const uv = geo.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
@@ -757,26 +825,32 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
       bm.castShadow = true; bm.receiveShadow = true; car.add(bm);
       const cabEnd = i === 0 || i === def.cars.length - 1; /* cab end faces are the yellow caps */      const bnd = new T.Mesh(new T.BoxGeometry(c.len * 1.001, H * 0.2, W + 0.05), this.mat(band));
       bnd.position.y = 1.5 + H * 0.26; car.add(bnd);
-      for (const s of [-(W / 2 + 0.03), W / 2 + 0.03]) {
-        const win = new T.Mesh(new T.BoxGeometry(c.len * 0.86, H * 0.22, 0.06), this.mat('#16202a'));
-        win.position.set(0, 1.5 + H * 0.62, s); car.add(win);
-        const glow = new T.Mesh(new T.BoxGeometry(c.len * 0.86, H * 0.2, 0.07),
-          new T.MeshBasicMaterial({ color: 0xffe9b0 }));
-        glow.position.copy(win.position);
-        glow.material.transparent = true;
-        glow.material.opacity = 0; /* lit at night */
-        car.add(glow);
+      if (!this._darkMat) this._darkMat = this.mat('#1a232c');
+      const det = new T.Mesh(this.carDetailGeo(c.k, c.len, H, W), this._darkMat);
+      det.castShadow = true; car.add(det);
+      if (!this._glowMat) {
+        this._glowMat = new T.MeshBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0 });
         if (!this._windowGlows) this._windowGlows = [];
-        this._windowGlows.push(glow.material);
+        this._windowGlows.push(this._glowMat);
       }
+      if (!this._glowGeoCache) this._glowGeoCache = {};
+      const gk = c.k + '|' + c.len + '|' + H;
+      if (!this._glowGeoCache[gk]) {
+        const gp = [];
+        const driveG = ['dtc', 'memu-d', 'dmu-p'].includes(c.k);
+        const gx0 = -c.len / 2 + (driveG ? 3.4 : 1.9), gx1 = c.len / 2 - 1.9;
+        for (const s of [1, -1]) for (let wx = gx0 + 0.9; wx + 1.35 <= gx1; wx += 2.15) gp.push(this.bx(1.25, H * 0.2, 0.07, wx + 0.67, 1.5 + H * 0.62, s * (W / 2 + 0.04)));
+        this._glowGeoCache[gk] = this.mergeGeos(gp);
+      }
+      const glow = new T.Mesh(this._glowGeoCache[gk], this._glowMat);
+      car.add(glow);
       for (const bx of [-c.len * 0.32, c.len * 0.32]) {
         const bog = new T.Mesh(new T.BoxGeometry(2.6, 0.7, W * 0.86), this.mat('#23262b'));
         bog.position.set(bx, 0.75, 0); car.add(bog);
       }
-      if (c.panto || (def.pantoCars && c.k === 'mc')) {
-        const pa = new T.Mesh(new T.BoxGeometry(1.6, 0.1, 0.12), this.mat('#2c2f34'));
-        pa.position.y = 1.5 + H + 0.6; pa.rotation.z = 0.5; car.add(pa);
-      }
+      if (!this._roofMat) this._roofMat = this.mat('#31363c');
+      const roof = new T.Mesh(this.roofGeo(c.len, H, c.panto || (def.pantoCars && c.k === 'mc')), this._roofMat);
+      roof.castShadow = true; car.add(roof);
       if (i === 0 && isPlayer) {
         const lamp = new T.Mesh(new T.SphereGeometry(0.26, 8, 8), new T.MeshBasicMaterial({ color: 0xfff3c2 }));
         lamp.position.set(c.len / 2 + 0.12, 2.3, 0); car.add(lamp);
