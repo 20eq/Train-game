@@ -200,6 +200,19 @@ const App = {
     this.placeCamera(dtRaw);
     this.r3d.animateRain(dtRaw, this.r3d.camera.position);
     this.r3d.animateWater(this.t);
+    /* adaptive quality: sustained low fps -> lighter render path (one-way) */
+    this._fpsAcc = (this._fpsAcc || 0) + dtRaw; this._fpsN = (this._fpsN || 0) + 1;
+    if (this._fpsAcc >= 4) {
+      const fps = this._fpsN / this._fpsAcc;
+      if (fps < 24 && !this.r3d.lowMode && this.t > 20) {
+        this.r3d.lowMode = true;
+        this.r3d.renderer.setPixelRatio(1);
+        this.r3d.renderer.shadowMap.enabled = false;
+        if (this.r3d.scene) this.r3d.scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+        this.hud('Performance mode enabled');
+      }
+      this._fpsAcc = 0; this._fpsN = 0;
+    }
     this.r3d.updateNightGlow(this.r3d._day == null ? 1 : this.r3d._day);
     const plv = this.game.player;
     if (plv) { Snd.clatter(dtRaw, Math.abs(plv.v)); Snd.squeal(dtRaw, plv.brakeCmd || 0, Math.abs(plv.v)); }

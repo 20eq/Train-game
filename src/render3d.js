@@ -415,6 +415,30 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
         }
       }
     }
+    /* Indian Railways platform clock on the canopy edge */
+    if (pf.len >= 150) {
+      const ccv = document.createElement('canvas');
+      ccv.width = ccv.height = 128;
+      const c2 = ccv.getContext('2d');
+      c2.fillStyle = '#f5f2ea'; c2.beginPath(); c2.arc(64, 64, 60, 0, Math.PI * 2); c2.fill();
+      c2.strokeStyle = '#22262b'; c2.lineWidth = 6; c2.beginPath(); c2.arc(64, 64, 58, 0, Math.PI * 2); c2.stroke();
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        c2.beginPath(); c2.lineWidth = 4;
+        c2.moveTo(64 + Math.sin(a) * 46, 64 - Math.cos(a) * 46);
+        c2.lineTo(64 + Math.sin(a) * 52, 64 - Math.cos(a) * 52);
+        c2.stroke();
+      }
+      const hand = (a, l, w, col) => { c2.strokeStyle = col; c2.lineWidth = w; c2.beginPath(); c2.moveTo(64, 64); c2.lineTo(64 + Math.sin(a) * l, 64 - Math.cos(a) * l); c2.stroke(); };
+      hand(0.9, 26, 6, '#16181c'); hand(2.4, 38, 5, '#16181c'); hand(4.4, 44, 2, '#c8331f');
+      const ctex = new T.CanvasTexture(ccv);
+      for (const fx of [-pf.len * 0.22, pf.len * 0.22]) {
+        const clk = new T.Mesh(new T.CircleGeometry(0.62, 20), new T.MeshBasicMaterial({ map: ctex, side: T.DoubleSide }));
+        clk.position.set(q.x + fx, q.y + 0.9 + 3.45, q.z + 3.15);
+        clk.rotation.y = Math.PI;
+        g.add(clk);
+      }
+    }
     /* platform lamps every ~40 m */
     {
       const nL = Math.max(2, Math.floor(pf.len / 40));
