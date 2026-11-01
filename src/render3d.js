@@ -553,6 +553,8 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
   }
 
   updateNightGlow(day) {
+    this._day = day;
+    this._applyCabLight();
     const lit = clamp(1 - day * 2.2, 0, 1);
     if (this._windowGlows) for (const m of this._windowGlows) m.opacity = lit * 0.92;
     if (this._lampMats) for (const m of this._lampMats) m.opacity = 0.15 + lit * 0.85;
@@ -993,6 +995,19 @@ this.ballastTex = this.loadTex('ballast', 1, 1);
     if (this.lampMesh) this.lampMesh.visible = !inCab;
     if (this.playerHandle) this.playerHandle.cars[0].visible = !inCab;
     if (this.cab) this.cab.visible = !!inCab;
+    this._cabView = !!inCab;
+    if (!this.cabLight) {
+      this.cabLight = new THREE.PointLight(0xffe8c4, 0, 5, 1.6);
+      this.cabLight.position.set(0, 0.5, -0.9);
+      this.camera.add(this.cabLight);
+    }
+    this._applyCabLight();
+  }
+
+  _applyCabLight() {
+    if (!this.cabLight) return;
+    const night = 1 - (this._day == null ? 1 : this._day);
+    this.cabLight.intensity = this._cabView ? 0.25 + night * 0.55 : 0;
   }
 
   followSun(focus) {
